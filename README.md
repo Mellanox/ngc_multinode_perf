@@ -10,7 +10,7 @@ usage: ./ngc_rdma_test.sh [client hostname] [client ib device] [server hostname]
 TCP test:
 * Will automatically detect device local NUMA node, disabled IRQ balancer, increase MTU to max and run iperf3 on the closest NUMA nodes 
 
-usage: ./ngc_tcp_test.sh <client ip> <client ib device> <server ip> <server ib device>
+usage: ./ngc_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device]
   
 Prerequisites:
 * numactl
