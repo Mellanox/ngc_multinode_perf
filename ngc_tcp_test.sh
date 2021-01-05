@@ -1,5 +1,5 @@
 #!/bin/bash
-# NGC Certification TCP test v2.0.5
+# NGC Certification TCP test v2.1
 # Owner: amira@nvidia.com
 #
 
@@ -22,51 +22,44 @@ ssh ${SERVER_IP} pkill iperf3
 CLIENT_NUMA_NODE=`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/numa_node`
 SERVER_NUMA_NODE=`ssh ${SERVER_IP} cat /sys/class/infiniband/${SERVER_DEVICE}/device/numa_node`
 
-PROC=8
-THREADS=2
-TIME=60
+CLIENT_NETDEV=`ssh ${CLIENT_IP} ls /sys/class/infiniband/${CLIENT_DEVICE}/device/net `
+SERVER_NETDEV=`ssh ${SERVER_IP} ls /sys/class/infiniband/${SERVER_DEVICE}/device/net`
+
+PROC=16
+THREADS=1
+TIME=120
 TCP_PORT_ID=`echo $CLIENT_DEVICE | cut -d "_" -f 2`
 TCP_PORT_ADDITION=`echo $TCP_PORT_ID*100 | bc -l `
 BASE_TCP_PORT=$((5200+$TCP_PORT_ADDITION))
 NUMACTL_HW='numactl --hardware | grep -v node'
 
-
+# Get Client NUMA topology
 CLIENT_HW_NUMA_LINE_FULL=`ssh ${CLIENT_IP} $NUMACTL_HW | grep " $CLIENT_NUMA_NODE:" `
-CLIENT_LOGICAL_NUMA_PER_SOCKET=`echo $CLIENT_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11' | wc -l`
+CLIENT_LOGICAL_NUMA_PER_SOCKET=`echo $CLIENT_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11|12' | wc -l`
 if [[ $CLIENT_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi 
 if [[ $CLIENT_HW_NUMA_LINE_FULL == *11* ]]; then
-	CLIENT_FIRST_SIBLING_NUMA=`python -c "import sys ; print(sys.argv.index('11')-2)" $CLIENT_HW_NUMA_LINE_FULL`
+	CLIENT_FIRST_SIBLING_NUMA=`python -c "import sys ; print(min(sys.argv.index('11'),sys.argv.index('12'))-2)" $CLIENT_HW_NUMA_LINE_FULL`
 else
 	CLIENT_FIRST_SIBLING_NUMA=$CLIENT_NUMA_NODE
 fi
 CLIENT_BASE_NUMA=`echo $(($CLIENT_FIRST_SIBLING_NUMA<$CLIENT_NUMA_NODE ? $CLIENT_FIRST_SIBLING_NUMA : $CLIENT_NUMA_NODE))`
 
-
+# Get Server NUMA topology
 SERVER_HW_NUMA_LINE_FULL=`ssh ${SERVER_IP} $NUMACTL_HW | grep " $SERVER_NUMA_NODE:" `
-SERVER_LOGICAL_NUMA_PER_SOCKET=`echo $SERVER_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11' | wc -l`
+SERVER_LOGICAL_NUMA_PER_SOCKET=`echo $SERVER_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11|12' | wc -l`
 if [[ $SERVER_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi 
 if [[ $SERVER_HW_NUMA_LINE_FULL == *11* ]]; then
-	SERVER_FIRST_SIBLING_NUMA=`python -c "import sys ; print(sys.argv.index('11')-2)" $SERVER_HW_NUMA_LINE_FULL`
+	SERVER_FIRST_SIBLING_NUMA=`python -c "import sys ; print(min(sys.argv.index('11'),sys.argv.index('12'))-2)" $SERVER_HW_NUMA_LINE_FULL`
 else
 	SERVER_FIRST_SIBLING_NUMA=$SERVER_NUMA_NODE
 fi
 SERVER_BASE_NUMA=`echo $(($SERVER_FIRST_SIBLING_NUMA<$SERVER_NUMA_NODE ? $SERVER_FIRST_SIBLING_NUMA : $SERVER_NUMA_NODE))`
-
-for N in `seq ${CLIENT_BASE_NUMA} $((CLIENT_BASE_NUMA+CLIENT_LOGICAL_NUMA_PER_SOCKET-1))` ; do CLIENT_CPULIST=$CLIENT_CPULIST,`ssh $CLIENT_IP cat /sys/devices/system/node/node$N/cpulist` ; done
-for N in `seq ${SERVER_BASE_NUMA} $((SERVER_BASE_NUMA+SERVER_LOGICAL_NUMA_PER_SOCKET-1))` ; do SERVER_CPULIST=$SERVER_CPULIST,`ssh $SERVER_IP cat /sys/devices/system/node/node$N/cpulist` ; done
  
-CLIENT_CPULIST=`if [[ $CLIENT_CPULIST == ,* ]]; then echo ${CLIENT_CPULIST:1} ; fi`
-SERVER_CPULIST=`if [[ $SERVER_CPULIST == ,* ]]; then echo ${SERVER_CPULIST:1} ; fi`
-
-
+# Stop IRQ balancer service
 ssh ${CLIENT_IP} systemctl stop irqbalance
 ssh ${SERVER_IP} systemctl stop irqbalance
 
-#TODO:
-#ssh ${CLIENT_IP} for f in /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/queues/rx-*/rps_flow_cnt ; do echo 2048 > $f ;done
-#ssh ${SERVER_IP} for f in /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/queues/rx-*/rps_flow_cnt ; do echo 2048 > $f ;done
-
-
+# Increase MTU to maximum per link type
 LINK_TYPE=`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/type`
 if [ $LINK_TYPE -eq 1 ]; then
 	MTU=9000
@@ -79,19 +72,39 @@ sleep 2
 ssh ${SERVER_IP} "echo $MTU > /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu"
 sleep 2
 
-ssh ${CLIENT_IP} set_irq_affinity_cpulist.sh $CLIENT_CPULIST $CLIENT_DEVICE 
-ssh ${SERVER_IP} set_irq_affinity_cpulist.sh $SERVER_CPULIST $SERVER_DEVICE 
+# Change number of channels to number of CPUs in the socket
+CLIENT_PRESET_MAX=`ssh ${CLIENT_IP} ethtool -l $CLIENT_NETDEV | grep Combined | head -1 | awk '{ print $2}'`
+SERVER_PRESET_MAX=`ssh ${SERVER_IP} ethtool -l $SERVER_NETDEV | grep Combined | head -1 | awk '{ print $2}'`
+for N in `seq ${CLIENT_BASE_NUMA} $((CLIENT_BASE_NUMA+CLIENT_LOGICAL_NUMA_PER_SOCKET-1))` ; do CLIENT_CPUCOUNT=$((CLIENT_CPUCOUNT+`ssh $CLIENT_IP ls /sys/devices/system/node/node$N/ | egrep 'cpu[0-9]' | wc -l`)) ; done
+for N in `seq ${SERVER_BASE_NUMA} $((SERVER_BASE_NUMA+SERVER_LOGICAL_NUMA_PER_SOCKET-1))` ; do SERVER_CPUCOUNT=$((SERVER_CPUCOUNT+`ssh $SERVER_IP ls /sys/devices/system/node/node$N/ | egrep 'cpu[0-9]' | wc -l`)) ; done
+ssh $CLIENT_IP ethtool -L $CLIENT_NETDEV combined `echo $(($CLIENT_CPUCOUNT<$CLIENT_PRESET_MAX ? $CLIENT_CPUCOUNT : $CLIENT_PRESET_MAX))`
+ssh $SERVER_IP ethtool -L $SERVER_NETDEV combined `echo $(($SERVER_CPUCOUNT<$SERVER_PRESET_MAX ? $SERVER_CPUCOUNT : $SERVER_PRESET_MAX))`
+
+# Enable aRFS for ethernet links
+if [ $LINK_TYPE -eq 1 ]; then
+	ssh ${CLIENT_IP} "ethtool -K ${CLIENT_NETDEV} ntuple on"
+	ssh ${CLIENT_IP} "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
+	ssh ${CLIENT_IP} 'for f in /sys/class/net/"'$CLIENT_NETDEV'"/queues/rx-*/rps_flow_cnt; do echo 32768 > $f; done'
+
+	ssh ${SERVER_IP} "ethtool -K ${SERVER_NETDEV} ntuple on"
+	ssh ${SERVER_IP} "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
+	ssh ${SERVER_IP} 'for f in /sys/class/net/"'$SERVER_NETDEV'"/queues/rx-*/rps_flow_cnt; do echo 32768 > $f; done'
+fi
+
+# Set IRQ affinity according to affinity hints
+ssh ${CLIENT_IP} set_irq_affinity.sh $CLIENT_NETDEV 
+ssh ${SERVER_IP} set_irq_affinity.sh $SERVER_NETDEV 
 
 echo -- starting iperf with $PROC processes $THREADS threads --
 
         for P in `seq 0 $((PROC-1))`
-        do ( sleep 0.1 ; ssh ${SERVER_IP} numactl --cpunodebind=$(((SERVER_NUMA_NODE+P)%$SERVER_LOGICAL_NUMA_PER_SOCKET+$SERVER_BASE_NUMA)) iperf3 -s -p $((BASE_TCP_PORT+P)) --one-off & )
+        do ( sleep 0.1 ; ssh ${SERVER_IP} numactl --cpunodebind=$(((SERVER_NUMA_NODE+P)%$SERVER_LOGICAL_NUMA_PER_SOCKET+$SERVER_BASE_NUMA)) numactl --physcpubind=+$((P/SERVER_LOGICAL_NUMA_PER_SOCKET)) iperf3 -s -p $((BASE_TCP_PORT+P)) --one-off & )
 		done | tee $LOG_SERVER &
 	
 	sleep 5 
        
 	for P in `seq 0 $((PROC-1))`
-        do ( sleep 0.1 ; ssh ${CLIENT_IP} numactl --cpunodebind=$(((CLIENT_NUMA_NODE+P)%$CLIENT_LOGICAL_NUMA_PER_SOCKET+$CLIENT_BASE_NUMA)) iperf3 -c ${SERVER_IP}  -P ${THREADS}  -t ${TIME} -p $((BASE_TCP_PORT+P)) -J & )
+        do ( sleep 0.1 ; ssh ${CLIENT_IP} numactl --cpunodebind=$(((CLIENT_NUMA_NODE+P)%$CLIENT_LOGICAL_NUMA_PER_SOCKET+$CLIENT_BASE_NUMA)) numactl --physcpubind=+$((P/CLIENT_LOGICAL_NUMA_PER_SOCKET)) iperf3 -c ${SERVER_IP}  -P ${THREADS}  -t ${TIME} -p $((BASE_TCP_PORT+P)) -J & )
         done | tee $LOG_CLIENT &
         wait
 
