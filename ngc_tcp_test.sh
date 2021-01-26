@@ -36,17 +36,17 @@ NUMACTL_HW='numactl --hardware | grep -v node'
 # Get Client NUMA topology
 CLIENT_HW_NUMA_LINE_FULL=`ssh ${CLIENT_IP} $NUMACTL_HW | grep " $CLIENT_NUMA_NODE:" `
 CLIENT_LOGICAL_NUMA_PER_SOCKET=`echo $CLIENT_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11|12' | wc -l`
-if [[ $CLIENT_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi 
+if [[ $CLIENT_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi
 N=-1 ; for I in $CLIENT_HW_NUMA_LINE_FULL ; do if [[ $I == 11 || $I == 12 || $I == 10 ]]; then CLIENT_FIRST_SIBLING_NUMA=$N; break; else N=$((N+1)) ; fi ;  done
 CLIENT_BASE_NUMA=`echo $(($CLIENT_FIRST_SIBLING_NUMA<$CLIENT_NUMA_NODE ? $CLIENT_FIRST_SIBLING_NUMA : $CLIENT_NUMA_NODE))`
 
 # Get Server NUMA topology
 SERVER_HW_NUMA_LINE_FULL=`ssh ${SERVER_IP} $NUMACTL_HW | grep " $SERVER_NUMA_NODE:" `
 SERVER_LOGICAL_NUMA_PER_SOCKET=`echo $SERVER_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11|12' | wc -l`
-if [[ $SERVER_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi 
+if [[ $SERVER_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi
 N=-1 ; for I in $SERVER_HW_NUMA_LINE_FULL ; do if [[ $I == 11 || $I == 12 || $I == 10 ]]; then SERVER_FIRST_SIBLING_NUMA=$N; break; else N=$((N+1)) ; fi ;  done
 SERVER_BASE_NUMA=`echo $(($SERVER_FIRST_SIBLING_NUMA<$SERVER_NUMA_NODE ? $SERVER_FIRST_SIBLING_NUMA : $SERVER_NUMA_NODE))`
- 
+
 # Stop IRQ balancer service
 ssh ${CLIENT_IP} systemctl stop irqbalance
 ssh ${SERVER_IP} systemctl stop irqbalance
@@ -84,17 +84,17 @@ if [ $LINK_TYPE -eq 1 ]; then
 fi
 
 # Set IRQ affinity according to affinity hints
-ssh ${CLIENT_IP} set_irq_affinity.sh $CLIENT_NETDEV 
-ssh ${SERVER_IP} set_irq_affinity.sh $SERVER_NETDEV 
+ssh ${CLIENT_IP} set_irq_affinity.sh $CLIENT_NETDEV
+ssh ${SERVER_IP} set_irq_affinity.sh $SERVER_NETDEV
 
 echo -- starting iperf with $PROC processes $THREADS threads --
 
         for P in `seq 0 $((PROC-1))`
         do ( sleep 0.1 ; ssh ${SERVER_IP} numactl --cpunodebind=$(((SERVER_NUMA_NODE+P)%$SERVER_LOGICAL_NUMA_PER_SOCKET+$SERVER_BASE_NUMA)) numactl --physcpubind=+$((P/SERVER_LOGICAL_NUMA_PER_SOCKET)) iperf3 -s -p $((BASE_TCP_PORT+P)) --one-off & )
 		done | tee $LOG_SERVER &
-	
-	sleep 5 
-       
+
+	sleep 5
+
 	for P in `seq 0 $((PROC-1))`
         do ( sleep 0.1 ; ssh ${CLIENT_IP} numactl --cpunodebind=$(((CLIENT_NUMA_NODE+P)%$CLIENT_LOGICAL_NUMA_PER_SOCKET+$CLIENT_BASE_NUMA)) numactl --physcpubind=+$((P/CLIENT_LOGICAL_NUMA_PER_SOCKET)) iperf3 -c ${SERVER_IP}  -P ${THREADS}  -t ${TIME} -p $((BASE_TCP_PORT+P)) -J & )
         done | tee $LOG_CLIENT &
