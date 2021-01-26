@@ -37,22 +37,14 @@ NUMACTL_HW='numactl --hardware | grep -v node'
 CLIENT_HW_NUMA_LINE_FULL=`ssh ${CLIENT_IP} $NUMACTL_HW | grep " $CLIENT_NUMA_NODE:" `
 CLIENT_LOGICAL_NUMA_PER_SOCKET=`echo $CLIENT_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11|12' | wc -l`
 if [[ $CLIENT_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi 
-if [[ $CLIENT_HW_NUMA_LINE_FULL == *11* ]]; then
-	CLIENT_FIRST_SIBLING_NUMA=`python -c "import sys ; print(min(sys.argv.index('11'),sys.argv.index('12'))-2)" $CLIENT_HW_NUMA_LINE_FULL`
-else
-	CLIENT_FIRST_SIBLING_NUMA=$CLIENT_NUMA_NODE
-fi
+N=-1 ; for I in $CLIENT_HW_NUMA_LINE_FULL ; do if [[ $I == 11 || $I == 12 || $I == 10 ]]; then CLIENT_FIRST_SIBLING_NUMA=$N; break; else N=$((N+1)) ; fi ;  done
 CLIENT_BASE_NUMA=`echo $(($CLIENT_FIRST_SIBLING_NUMA<$CLIENT_NUMA_NODE ? $CLIENT_FIRST_SIBLING_NUMA : $CLIENT_NUMA_NODE))`
 
 # Get Server NUMA topology
 SERVER_HW_NUMA_LINE_FULL=`ssh ${SERVER_IP} $NUMACTL_HW | grep " $SERVER_NUMA_NODE:" `
 SERVER_LOGICAL_NUMA_PER_SOCKET=`echo $SERVER_HW_NUMA_LINE_FULL | tr ' ' '\n' | grep -v ":" | egrep '10|11|12' | wc -l`
 if [[ $SERVER_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ; exit 1 ; fi 
-if [[ $SERVER_HW_NUMA_LINE_FULL == *11* ]]; then
-	SERVER_FIRST_SIBLING_NUMA=`python -c "import sys ; print(min(sys.argv.index('11'),sys.argv.index('12'))-2)" $SERVER_HW_NUMA_LINE_FULL`
-else
-	SERVER_FIRST_SIBLING_NUMA=$SERVER_NUMA_NODE
-fi
+N=-1 ; for I in $SERVER_HW_NUMA_LINE_FULL ; do if [[ $I == 11 || $I == 12 || $I == 10 ]]; then SERVER_FIRST_SIBLING_NUMA=$N; break; else N=$((N+1)) ; fi ;  done
 SERVER_BASE_NUMA=`echo $(($SERVER_FIRST_SIBLING_NUMA<$SERVER_NUMA_NODE ? $SERVER_FIRST_SIBLING_NUMA : $SERVER_NUMA_NODE))`
  
 # Stop IRQ balancer service
