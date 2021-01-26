@@ -83,9 +83,42 @@ if [ $LINK_TYPE -eq 1 ]; then
 	ssh ${SERVER_IP} 'for f in /sys/class/net/"'$SERVER_NETDEV'"/queues/rx-*/rps_flow_cnt; do echo 32768 > $f; done'
 fi
 
-# Set IRQ affinity according to affinity hints
-ssh ${CLIENT_IP} set_irq_affinity.sh $CLIENT_NETDEV
-ssh ${SERVER_IP} set_irq_affinity.sh $SERVER_NETDEV
+# Set IRQ affinity to local socket CPUs
+NUMA_TOPO="numactl -H"
+CLIENT_NUMA_TOPO=$(ssh $CLIENT_IP $NUMA_TOPO)
+SERVER_NUMA_TOPO=$(ssh $SERVER_IP $NUMA_TOPO)
+THREAD_PER_CORE="lscpu | grep Thread | grep -oP \"\d+\""
+CLIENT_THREAD_PER_CORE=$(ssh $CLIENT_IP "$THREAD_PER_CORE")
+SERVER_THREAD_PER_CORE=$(ssh $SERVER_IP "$THREAD_PER_CORE")
+CLIENT_PHYSICAL_CORE_COUNT=$((CLIENT_CPUCOUNT/CLIENT_LOGICAL_NUMA_PER_SOCKET/CLIENT_THREAD_PER_CORE))
+SERVER_PHYSICAL_CORE_COUNT=$((SERVER_CPUCOUNT/SERVER_LOGICAL_NUMA_PER_SOCKET/SERVER_THREAD_PER_CORE))
+CLIENT_PHYSICAL_CORES=()
+CLIENT_LOGICAL_CORES=()
+SERVER_PHYSICAL_CORES=()
+SERVER_LOGICAL_CORES=()
+for node in $(seq $CLIENT_FIRST_SIBLING_NUMA $((CLIENT_FIRST_SIBLING_NUMA+CLIENT_LOGICAL_NUMA_PER_SOCKET-1))) ; do
+    numa_cores=($(echo "$CLIENT_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
+    CLIENT_PHYSICAL_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${numa_cores[@]:0:CLIENT_PHYSICAL_CORE_COUNT})
+    CLIENT_LOGICAL_CORES=(${CLIENT_LOGICAL_CORES[@]} ${numa_cores[@]:CLIENT_PHYSICAL_CORE_COUNT})
+done
+for node in $(seq $SERVER_FIRST_SIBLING_NUMA $((SERVER_FIRST_SIBLING_NUMA+SERVER_LOGICAL_NUMA_PER_SOCKET-1))) ; do
+    numa_cores=($(echo "$SERVER_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
+    SERVER_PHYSICAL_CORES=(${SERVER_PHYSICAL_CORES[@]} ${numa_cores[@]:0:SERVER_PHYSICAL_CORE_COUNT})
+    SERVER_LOGICAL_CORES=(${SERVER_LOGICAL_CORES[@]} ${numa_cores[@]:SERVER_PHYSICAL_CORE_COUNT})
+done
+CLIENTS_AFFINITY_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${CLIENT_LOGICAL_CORES[@]})
+SERVER_AFFINITY_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${SERVER_LOGICAL_CORES[@]})
+CLIENT_AFFINITY_IRQ_COUNT=$((CLIENT_CPUCOUNT<CLIENT_PRESET_MAX ? CLIENT_CPUCOUNT : CLIENT_PRESET_MAX))
+SERVER_AFFINITY_IRQ_COUNT=$((SERVER_CPUCOUNT<SERVER_PRESET_MAX ? SERVER_CPUCOUNT : SERVER_PRESET_MAX))
+
+ssh ${CLIENT_IP} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CLIENTS_AFFINITY_CORES[@]::CLIENT_AFFINITY_IRQ_COUNT}")" $CLIENT_NETDEV
+ssh ${SERVER_IP} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${SERVER_AFFINITY_CORES[@]::SERVER_AFFINITY_IRQ_COUNT}") "$SERVER_NETDEV
+
+# Toggle interfaces down/up so channels allocation will be according to actual IRQ affinity
+ssh ${SERVER_IP} "ip l s down $SERVER_NETDEV ; ip l s up $SERVER_NETDEV"
+sleep 1
+ssh ${CLIENT_IP} "ip l s down $CLIENT_NETDEV ; ip l s up $CLIENT_NETDEV"
+sleep 1
 
 echo -- starting iperf with $PROC processes $THREADS threads --
 
