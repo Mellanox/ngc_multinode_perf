@@ -52,7 +52,7 @@ ssh ${CLIENT_IP} systemctl stop irqbalance
 ssh ${SERVER_IP} systemctl stop irqbalance
 
 # Increase MTU to maximum per link type
-LINK_TYPE=`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/type`
+LINK_TYPE=`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/\*/type`
 if [ $LINK_TYPE -eq 1 ]; then
 	MTU=9000
 elif [ $LINK_TYPE -eq 32 ]; then
