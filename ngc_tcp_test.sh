@@ -15,7 +15,8 @@ SERVER_IP=$3
 SERVER_DEVICE=$4
 LOG_CLIENT=ngc_tcp_client_${CLIENT_IP}.log
 LOG_SERVER=ngc_tcp_server_${SERVER_IP}.log
-MTU_SIZE=$5
+LOCAL_BF=$5
+REMOTE_BF=$6
 
 ssh ${CLIENT_IP} pkill iperf3
 ssh ${SERVER_IP} pkill iperf3
@@ -54,15 +55,20 @@ ssh ${SERVER_IP} systemctl stop irqbalance
 
 # Increase MTU to maximum per link type
 LINK_TYPE=`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/\*/type`
-if [[ ! -z "${MTU_SIZE}" ]]; then
-	MTU=${MTU_SIZE}
-else
 if [ $LINK_TYPE -eq 1 ]; then
 	MTU=9000
 elif [ $LINK_TYPE -eq 32 ]; then
 	MTU=4092
 fi
+
+# Set IPsec offload on both BlueFields & Lower MTU size
+if [[ ! -z "${LOCAL_BF}" ]] && [[ ! -z "${REMOTE_BF}" ]]; then
+	scriptdir="$(dirname "$0")"
+	cd "$scriptdir"
+	bash ./ipsec_full_offload_setup.sh ${LOCAL_BF} ${REMOTE_BF} ${MTU}
+	MTU=$((MTU-500))
 fi
+	
 
 ssh ${CLIENT_IP} "echo $MTU > /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu"
 sleep 2

@@ -9,6 +9,8 @@ CLIENT_IP=$1
 CLIENT_DEVICE=$2
 SERVER_IP=$3
 SERVER_DEVICE=$4
+LOCAL_BF=$5
+REMOTE_BF=$6
 
 # please 
 CLIENT_NUMA_NODE=`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/numa_node`
@@ -16,6 +18,15 @@ SERVER_NUMA_NODE=`ssh ${SERVER_IP} cat /sys/class/infiniband/${SERVER_DEVICE}/de
 
 # Set pass rate to 90% of the bidirectional link speed
 BW_PASS_RATE=$(echo 2*0.9*`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/ports/1/rate` | awk '{ print $1}' | bc -l )
+
+# Set IPsec offload on both BlueFields
+if [[ ! -z "${LOCAL_BF}" ]] && [[ ! -z "${REMOTE_BF}" ]]; then
+	net_name=`ssh ${CLIENT_IP} ls -l /sys/class/infiniband/${CLIENT_DEVICE}/device/net/ |tail -1 | cut -d" " -f9`
+	MTU=`ssh ${CLIENT_IP} ip addr | grep mtu | grep ${net_name} | cut -d" " -f5`
+	scriptdir="$(dirname "$0")"
+	cd "$scriptdir"
+	bash ./ipsec_full_offload_setup.sh ${LOCAL_BF} ${REMOTE_BF} $(( ${MTU} + 500 ))
+fi
 
 for TEST in ib_write_bw ib_read_bw ib_send_bw ; do 
 
