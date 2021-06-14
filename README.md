@@ -14,7 +14,7 @@ TCP test:
 usage: ./ngc_tcp_test.sh [client trusted ip] [client ib device] [server trusted ip] [server ib device] [duplex, options: HALF,FULL, default: HALF] [change_mtu, options: CHANGE,DONT_CHANGE, default: CHANGE>]  
 
 Prerequisites:
-* passwordless root access to the participating nodes
+* Passwordless root access to the participating nodes
 * numactl
 * bc
 * iperf3 version >= 3.5
