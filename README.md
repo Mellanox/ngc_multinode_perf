@@ -19,8 +19,8 @@ Test supports single port (port 0) only.
 Will configure IPsec full offload on both client and server BlueField-2 and then run TCP test
 usage: ./ngc_ipsec_full_offload_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device] [client bluefield hostname/ip] [server bluefield hostname/ip] [optional: mtu size]
 
-
 Prerequisites:
+* Passwordless root access to the participating nodes
 * numactl
 * bc
 * iperf3 version >= 3.5
