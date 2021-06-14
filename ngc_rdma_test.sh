@@ -10,9 +10,15 @@ CLIENT_DEVICE=$2
 SERVER_IP=$3
 SERVER_DEVICE=$4
 
-# please 
+# get device local numa node
 CLIENT_NUMA_NODE=`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/numa_node`
+if [[ $CLIENT_NUMA_NODE == "-1" ]]; then
+	CLIENT_NUMA_NODE="0"
+fi
 SERVER_NUMA_NODE=`ssh ${SERVER_IP} cat /sys/class/infiniband/${SERVER_DEVICE}/device/numa_node`
+if [[ $SERVER_NUMA_NODE == "-1" ]]; then
+	SERVER_NUMA_NODE="0"
+fi
 
 # Set pass rate to 90% of the bidirectional link speed
 BW_PASS_RATE=$(echo 2*0.9*`ssh ${CLIENT_IP} cat /sys/class/infiniband/${CLIENT_DEVICE}/ports/1/rate` | awk '{ print $1}' | bc -l )
