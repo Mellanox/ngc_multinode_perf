@@ -1,13 +1,50 @@
 #!/bin/bash
-# NGC Certification TCP test v2.2
+# NGC Certification TCP test v2.3
 # Owner: amira@nvidia.com
 #
 
-set -x
 if [[ -z $4 ]]; then
-	echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> <duplex, options: HALF,FULL, default: HALF> <change_mtu, options: CHANGE,DONT_CHANGE, default: CHANGE>"
+	echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
+	echo "           duplex - options: HALF,FULL, default: HALF"
+	echo "           change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
 	exit 1
 fi
+
+function check_connection {
+	ssh $CLIENT_TRUSTED ping $SERVER_IP -c 5
+	if [ $? -ne 0 ]; then
+		echo "No ping from client to server, test aborted"
+		exit 1
+	fi
+}
+
+function change_mtu {
+	if [ $LINK_TYPE -eq 1 ]; then
+		MTU=9000
+	elif [ $LINK_TYPE -eq 32 ]; then
+		MTU=4092
+	fi
+	ssh ${CLIENT_TRUSTED} "echo $MTU > /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu"
+	ssh ${SERVER_TRUSTED} "echo $MTU > /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu"
+	CURR_MTU=`ssh ${CLIENT_TRUSTED} "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu"	`
+	if [ $CURR_MTU != $MTU ]; then
+		echo 'Warning, MTU was not configured correctly on Client'
+	fi
+	CURR_MTU=`ssh ${SERVER_TRUSTED} "cat /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu"	`
+	if [ $CURR_MTU != $MTU ]; then
+		echo 'Warning, MTU was not configured correctly on Server'
+	fi
+}
+
+function run_iperf2 {
+	ssh ${SERVER_TRUSTED} pkill iperf
+	ssh ${SERVER_TRUSTED} iperf -s &
+	sleep 5
+	ssh ${CLIENT_TRUSTED} iperf -c $SERVER_IP -P $MAX_PROC -t 30
+	ssh ${SERVER_TRUSTED} pkill iperf
+}
+
+set -x
 
 CLIENT_TRUSTED=$1
 CLIENT_DEVICE=$2
@@ -58,6 +95,8 @@ ssh ${CLIENT_TRUSTED} iperf3 -v
 ssh ${SERVER_TRUSTED} iperf3 -v
 ssh ${CLIENT_TRUSTED} cat /proc/cmdline
 ssh ${SERVER_TRUSTED} cat /proc/cmdline
+ssh ${CLIENT_TRUSTED} iperf -v
+ssh ${SERVER_TRUSTED} iperf -v
 
 MAX_PROC=16
 THREADS=1
@@ -81,6 +120,9 @@ if [[ $SERVER_LOGICAL_NUMA_PER_SOCKET -eq 0 ]]; then echo "Error - 0 detected" ;
 N=-1 ; for I in $SERVER_HW_NUMA_LINE_FULL ; do if [[ $I == 11 || $I == 12 || $I == 10 ]]; then SERVER_FIRST_SIBLING_NUMA=$N; break; else N=$((N+1)) ; fi ;  done
 SERVER_BASE_NUMA=`echo $(($SERVER_FIRST_SIBLING_NUMA<$SERVER_NUMA_NODE ? $SERVER_FIRST_SIBLING_NUMA : $SERVER_NUMA_NODE))`
 
+# uncomment if needed: Run iperf2 for reference before any change
+# run_iperf2
+
 # Stop IRQ balancer service
 ssh ${CLIENT_TRUSTED} systemctl stop irqbalance
 ssh ${SERVER_TRUSTED} systemctl stop irqbalance
@@ -88,13 +130,7 @@ ssh ${SERVER_TRUSTED} systemctl stop irqbalance
 LINK_TYPE=`ssh ${CLIENT_TRUSTED} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/\*/type`
 # Increase MTU to maximum per link type
 if [[ $CHANGE_MTU == "CHANGE" ]]; then
-	if [ $LINK_TYPE -eq 1 ]; then
-		MTU=9000
-	elif [ $LINK_TYPE -eq 32 ]; then
-		MTU=4092
-	fi
-	ssh ${CLIENT_TRUSTED} "echo $MTU > /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu"
-	ssh ${SERVER_TRUSTED} "echo $MTU > /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu"
+	change_mtu	
 fi
 
 
@@ -159,19 +195,22 @@ sleep 2
 
 PROC=`printf "%s\n" $CLIENT_AFFINITY_IRQ_COUNT $SERVER_AFFINITY_IRQ_COUNT $MAX_PROC | sort -h | head -n1`
 
+# Verifying connectivity before starting the test
+check_connection
+
 echo -- starting iperf with $PROC processes $THREADS threads --
 
-        for P in `seq 0 $((PROC-1))`
-        do ( sleep 0.1 
-             ssh ${SERVER_TRUSTED} numactl --cpunodebind=$(((SERVER_NUMA_NODE+P)%$SERVER_LOGICAL_NUMA_PER_SOCKET+$SERVER_BASE_NUMA)) numactl --physcpubind=+$((P/SERVER_LOGICAL_NUMA_PER_SOCKET)) iperf3 -s -p $((BASE_TCP_PORT+P)) --one-off & 
-			 if [[ $DUPLEX == "FULL" ]]; then
+    for P in `seq 0 $((PROC-1))`
+		do ( sleep 0.1 
+			ssh ${SERVER_TRUSTED} numactl --cpunodebind=$(((SERVER_NUMA_NODE+P)%$SERVER_LOGICAL_NUMA_PER_SOCKET+$SERVER_BASE_NUMA)) numactl --physcpubind=+$((P/SERVER_LOGICAL_NUMA_PER_SOCKET)) iperf3 -s -p $((BASE_TCP_PORT+P)) --one-off & 
+			if [[ $DUPLEX == "FULL" ]]; then
 				ssh ${CLIENT_TRUSTED} numactl --cpunodebind=$(((CLIENT_NUMA_NODE+P)%$CLIENT_LOGICAL_NUMA_PER_SOCKET+$CLIENT_BASE_NUMA)) numactl --physcpubind=+$((P/CLIENT_LOGICAL_NUMA_PER_SOCKET)) iperf3 -s -p $((BASE_TCP_PORT+P)) --one-off & 
-			 fi
+			fi
 			)
 		done | tee $LOG_SERVER &
 
-	sleep 5
-
+	check_connection
+    
 	for P in `seq 0 $((PROC-1))`
         do ( sleep 0.1
 			 ssh ${CLIENT_TRUSTED} numactl --cpunodebind=$(((CLIENT_NUMA_NODE+P)%$CLIENT_LOGICAL_NUMA_PER_SOCKET+$CLIENT_BASE_NUMA)) numactl --physcpubind=+$((P/CLIENT_LOGICAL_NUMA_PER_SOCKET)) iperf3 -c ${SERVER_IP}  -P ${THREADS}  -t ${TIME} -p $((BASE_TCP_PORT+P)) -J & 
@@ -186,5 +225,8 @@ echo -- starting iperf with $PROC processes $THREADS threads --
         IPERF_TPUT=`cat $LOG_CLIENT | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } '`
 	BITS=`printf '%.0f' $IPERF_TPUT`
         echo "Throughput is: `bc -l <<< "scale=2; $BITS/1000000000"` Gb/s"
+
+# uncomment if needed: Run iperf2 for reference after settings
+# run_iperf2
 
 set +x
