@@ -5,7 +5,7 @@ RDMA test:
 Will automatically detect device local NUMA node and run write/read/send bidirectional tests
 Pass creteria is 90% of port link speed
 
-usage: ./ngc_rdma_test.sh [client hostname] [client ib device] [server hostname] [server ib device]
+Usage: ./ngc_rdma_test.sh [client hostname] [client ib device] [server hostname] [server ib device]
 
 TCP test:
 
@@ -20,7 +20,7 @@ Relevant for BlueField-2 DPUs
 Test supports single port (port 0) only.
 Will configure IPsec full offload on both client and server BlueField-2 and then run TCP test
 
-usage: ./ngc_ipsec_full_offload_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device] [client bluefield hostname/ip] [server bluefield hostname/ip] [optional: mtu size]
+Usage: ./ngc_ipsec_full_offload_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device] [client bluefield hostname/ip] [server bluefield hostname/ip] [optional: mtu size]
 
 Prerequisites:
 * Passwordless root access to the participating nodes
