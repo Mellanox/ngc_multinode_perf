@@ -17,10 +17,17 @@ Usage: ./ngc_tcp_test.sh [client trusted ip] [client ib device] [server trusted 
 IPsec full offload test:
 
 Relevant for BlueField-2 DPUs
-Test supports single port (port 0) only.
+Test supports single port (port 0) only
 Will configure IPsec full offload on both client and server BlueField-2 and then run TCP test
 
 Usage: ./ngc_ipsec_full_offload_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device] [client bluefield hostname/ip] [server bluefield hostname/ip] [optional: mtu size]
+
+IPsec crypto offload test:
+
+Relevant for connectX-6 DX only
+will configure IPsec crypto offload on both client and server run TCP test and remove IPsec configuration
+usage: ./ngc_ipsec_crypto_offload_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device] [client bluefield hostname/ip] [server bluefield hostname/ip] [number of tunnels]
+number of tunnels should not exceed number of IPs configured on  NICs
 
 Prerequisites:
 * Passwordless root access to the participating nodes
