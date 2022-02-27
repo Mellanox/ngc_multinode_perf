@@ -5,8 +5,8 @@
 
 if [[ -z $4 ]]; then
 	echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
-	echo "           duplex - options: HALF,FULL, default: HALF"
-	echo "           change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
+	echo "		   duplex - options: HALF,FULL, default: HALF"
+	echo "		   change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
 	exit 1
 fi
 scriptdir="$(dirname "$0")"
@@ -19,7 +19,7 @@ SERVER_DEVICE=$4
 
 prep_for_tune_and_iperf_test
 
-set -x
+#set -x
 
 if [[ -z $5 ]]; then
 	DUPLEX="HALF"
@@ -34,7 +34,10 @@ fi
 
 LOG_CLIENT=ngc_tcp_client_${CLIENT_TRUSTED}.log
 LOG_SERVER=ngc_tcp_server_${SERVER_TRUSTED}.log
-
+CLIENT_CORE_USAGES_FILE="/tmp/ngc_client_core_usages.log"
+SERVER_CORE_USAGES_FILE="/tmp/ngc_server_core_usages.log"
+CLIENT_ALL_CORE_USAGES_FILE="/tmp/ngc_all_client_core_usages.log"
+SERVER_ALL_CORE_USAGES_FILE="/tmp/ngc_all_server_core_usages.log"
 
 # uncomment if needed: Run iperf2 for reference before any change
 # run_iperf2
@@ -48,8 +51,6 @@ LINK_TYPE=`ssh ${CLIENT_TRUSTED} cat /sys/class/infiniband/${CLIENT_DEVICE}/devi
 if [[ $CHANGE_MTU == "CHANGE" ]]; then
 	change_mtu	
 fi
-
-
 
 # Change number of channels to number of CPUs in the socket
 CLIENT_PRESET_MAX=`ssh ${CLIENT_TRUSTED} ethtool -l $CLIENT_NETDEV | grep Combined | head -1 | awk '{ print $2}'`
@@ -84,14 +85,14 @@ CLIENT_LOGICAL_CORES=()
 SERVER_PHYSICAL_CORES=()
 SERVER_LOGICAL_CORES=()
 for node in $(seq $CLIENT_FIRST_SIBLING_NUMA $((CLIENT_FIRST_SIBLING_NUMA+CLIENT_LOGICAL_NUMA_PER_SOCKET-1))) ; do
-    numa_cores=($(echo "$CLIENT_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
-    CLIENT_PHYSICAL_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${numa_cores[@]:0:CLIENT_PHYSICAL_CORE_COUNT})
-    CLIENT_LOGICAL_CORES=(${CLIENT_LOGICAL_CORES[@]} ${numa_cores[@]:CLIENT_PHYSICAL_CORE_COUNT})
+	numa_cores=($(echo "$CLIENT_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
+	CLIENT_PHYSICAL_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${numa_cores[@]:0:CLIENT_PHYSICAL_CORE_COUNT})
+	CLIENT_LOGICAL_CORES=(${CLIENT_LOGICAL_CORES[@]} ${numa_cores[@]:CLIENT_PHYSICAL_CORE_COUNT})
 done
 for node in $(seq $SERVER_FIRST_SIBLING_NUMA $((SERVER_FIRST_SIBLING_NUMA+SERVER_LOGICAL_NUMA_PER_SOCKET-1))) ; do
-    numa_cores=($(echo "$SERVER_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
-    SERVER_PHYSICAL_CORES=(${SERVER_PHYSICAL_CORES[@]} ${numa_cores[@]:0:SERVER_PHYSICAL_CORE_COUNT})
-    SERVER_LOGICAL_CORES=(${SERVER_LOGICAL_CORES[@]} ${numa_cores[@]:SERVER_PHYSICAL_CORE_COUNT})
+	numa_cores=($(echo "$SERVER_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
+	SERVER_PHYSICAL_CORES=(${SERVER_PHYSICAL_CORES[@]} ${numa_cores[@]:0:SERVER_PHYSICAL_CORE_COUNT})
+	SERVER_LOGICAL_CORES=(${SERVER_LOGICAL_CORES[@]} ${numa_cores[@]:SERVER_PHYSICAL_CORE_COUNT})
 done
 CLIENTS_AFFINITY_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${CLIENT_LOGICAL_CORES[@]})
 SERVER_AFFINITY_CORES=(${SERVER_PHYSICAL_CORES[@]} ${SERVER_LOGICAL_CORES[@]})
@@ -101,14 +102,14 @@ SERVER_AFFINITY_IRQ_COUNT=$((SERVER_CPUCOUNT<SERVER_PRESET_MAX ? SERVER_CPUCOUNT
 ssh ${CLIENT_TRUSTED} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CLIENTS_AFFINITY_CORES[@]::CLIENT_AFFINITY_IRQ_COUNT}")" $CLIENT_NETDEV
 ssh ${SERVER_TRUSTED} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${SERVER_AFFINITY_CORES[@]::SERVER_AFFINITY_IRQ_COUNT}") "$SERVER_NETDEV
 
-
 # Toggle interfaces down/up so channels allocation will be according to actual IRQ affinity
-ssh ${SERVER_TRUSTED} "ip l s down $SERVER_NETDEV ; ip l s up $SERVER_NETDEV"
+ssh ${SERVER_TRUSTED} "ifconfig $SERVER_NETDEV down; ifconfig  $SERVER_NETDEV up"
 sleep 2
-ssh ${CLIENT_TRUSTED} "ip l s down $CLIENT_NETDEV ; ip l s up $CLIENT_NETDEV"
+ssh ${CLIENT_TRUSTED} "ifconfig $CLIENT_NETDEV down; ifconfig  $CLIENT_NETDEV up"
 sleep 2
 
 run_iperf3
+
 # uncomment if needed: Run iperf2 for reference after settings
 # run_iperf2
 
