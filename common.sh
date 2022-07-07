@@ -208,10 +208,10 @@ function run_iperf3 {
 
 	check_connection
 	
-	ssh ${CLIENT_TRUSTED} "/tmp/run_iperf3_clients.sh $RESULT_FILE $PROC $CLIENT_ACTIVE_CORES_LIST ${SERVER_IP[$((${P}%${IP_AMOUNT}))]} $BASE_TCP_PORT $THREADS $TIME &" &
+	ssh ${CLIENT_TRUSTED} "/tmp/run_iperf3_clients.sh $RESULT_FILE$$_ $PROC $CLIENT_ACTIVE_CORES_LIST ${SERVER_IP[$((${P}%${IP_AMOUNT}))]} $BASE_TCP_PORT $THREADS $TIME &" &
 	if [[ $DUPLEX == "FULL" ]]; then
 		sleep 0.1
-		ssh ${SERVER_TRUSTED} "/tmp/run_iperf3_clients.sh $RESULT_FILE $PROC $SERVER_ACTIVE_CORES_LIST ${CLIENT_IP[$((${P}%${IP_AMOUNT}))]} $((BASE_TCP_PORT*2)) $THREADS $TIME &" &
+		ssh ${SERVER_TRUSTED} "/tmp/run_iperf3_clients.sh $RESULT_FILE$$_ $PROC $SERVER_ACTIVE_CORES_LIST ${CLIENT_IP[$((${P}%${IP_AMOUNT}))]} $((BASE_TCP_PORT*2)) $THREADS $TIME &" &
 	fi
 	# ssh ${SERVER_TRUSTED} "bash -s" -- < ${scriptdir}/run_iperf3_servers.sh $PROC $SERVER_NUMA_NODE $SERVER_LOGICAL_NUMA_PER_SOCKET $SERVER_BASE_NUMA $BASE_TCP_PORT &
 	# if [[ $DUPLEX == "FULL" ]]; then
@@ -221,10 +221,10 @@ function run_iperf3 {
 
 	# check_connection
 	
-	# ssh ${CLIENT_TRUSTED} "bash -s" -- < ${scriptdir}/run_iperf3_clients.sh $RESULT_FILE $PROC $CLIENT_NUMA_NODE $CLIENT_LOGICAL_NUMA_PER_SOCKET $CLIENT_BASE_NUMA ${SERVER_IP[$((${P}%${IP_AMOUNT}))]} $BASE_TCP_PORT $THREADS $TIME &
+	# ssh ${CLIENT_TRUSTED} "bash -s" -- < ${scriptdir}/run_iperf3_clients.sh $RESULT_FILE$$_ $PROC $CLIENT_NUMA_NODE $CLIENT_LOGICAL_NUMA_PER_SOCKET $CLIENT_BASE_NUMA ${SERVER_IP[$((${P}%${IP_AMOUNT}))]} $BASE_TCP_PORT $THREADS $TIME &
 	# if [[ $DUPLEX == "FULL" ]]; then
 	# 	sleep 0.1
-	# 	ssh ${SERVER_TRUSTED} "bash -s" -- < ${scriptdir}/run_iperf3_clients.sh $RESULT_FILE $PROC $SERVER_NUMA_NODE $SERVER_LOGICAL_NUMA_PER_SOCKET $SERVER_BASE_NUMA ${CLIENT_IP[$((${P}%${IP_AMOUNT}))]} $((BASE_TCP_PORT*2)) $THREADS $TIME &
+	# 	ssh ${SERVER_TRUSTED} "bash -s" -- < ${scriptdir}/run_iperf3_clients.sh $RESULT_FILE$$_ $PROC $SERVER_NUMA_NODE $SERVER_LOGICAL_NUMA_PER_SOCKET $SERVER_BASE_NUMA ${CLIENT_IP[$((${P}%${IP_AMOUNT}))]} $((BASE_TCP_PORT*2)) $THREADS $TIME &
 	# fi
 	
 	DURATION=$( expr $TIME - 3 )
@@ -232,18 +232,18 @@ function run_iperf3 {
 	ssh ${SERVER_TRUSTED} "sar -u -P $SERVER_ACTIVE_CORES_LIST,all $DURATION 1 | grep \"Average\" | head -n $( expr $PROC + 2 ) > $SERVER_CORE_USAGES_FILE$$" &
 	
 	wait
-	ssh ${CLIENT_TRUSTED} "cat $RESULT_FILE* > $CLIENT_RESULT_RUN"
-	if ! [ -f $CLIENT_RESULT_RUN ]; then 
-		scp ${CLIENT_TRUSTED}:$CLIENT_RESULT_RUN $CLIENT_RESULT_RUN
+	ssh ${CLIENT_TRUSTED} "cat $RESULT_FILE$$_* > $CLIENT_RESULT_RUN$$"
+	if ! [ -f $CLIENT_RESULT_RUN$$ ]; then 
+		scp ${CLIENT_TRUSTED}:$CLIENT_RESULT_RUN$$ $CLIENT_RESULT_RUN$$
 	fi
-	IPERF_TPUT_CLIENT=`cat $CLIENT_RESULT_RUN | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } '`
+	IPERF_TPUT_CLIENT=`cat $CLIENT_RESULT_RUN$$ | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } '`
 	BITS_CLIENT=`printf '%.0f' $IPERF_TPUT_CLIENT`
 
 	if [[ $DUPLEX == "FULL" ]]; then
-		ssh ${SERVER_TRUSTED} "cat $RESULT_FILE* > $SERVER_RESULT_RUN"
-		if ! [ -f $SERVER_RESULT_RUN ]; then 
-			scp ${SERVER_TRUSTED}:$SERVER_RESULT_RUN $SERVER_RESULT_RUN
-			IPERF_TPUT_SERVER=`cat $SERVER_RESULT_RUN | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } '`
+		ssh ${SERVER_TRUSTED} "cat $RESULT_FILE$$_* > $SERVER_RESULT_RUN$$"
+		if ! [ -f $SERVER_RESULT_RUN$$ ]; then 
+			scp ${SERVER_TRUSTED}:$SERVER_RESULT_RUN$$ $SERVER_RESULT_RUN$$
+			IPERF_TPUT_SERVER=`cat $SERVER_RESULT_RUN$$ | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } '`
 			BITS_SERVER=`printf '%.0f' $IPERF_TPUT_SERVER`
 		fi
 	fi
