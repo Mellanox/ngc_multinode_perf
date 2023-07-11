@@ -1,13 +1,12 @@
 #!/bin/bash
 # NGC Certification IPsec crypto offload test v0.1
 # Owner: dorko@nvidia.com
-#
 
 if [[ -z $5 ]]; then
-	echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
-	echo "           duplex - options: HALF,FULL, default: HALF"
-	echo "           change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
-	exit 1
+    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
+    echo "           duplex - options: HALF,FULL, default: HALF"
+    echo "           change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
+    exit 1
 fi
 
 CLIENT_TRUSTED=$1
@@ -35,14 +34,13 @@ declare -a new_client_IP
 declare -a new_server_IP
 for (( i=0; i<$NUM_OF_TUNNELS; i++ ))
 do
+    REQID_C=0x28f3954$( printf "%x" $i)
+    REQID_S=0x622a73b$( printf "%x" $i)
 
-REQID_C=0x28f3954$( printf "%x" $i)
-REQID_S=0x622a73b$( printf "%x" $i)
-
-set_ipsec_rules ${CLIENT_TRUSTED} ${CLIENT_NETDEV} ${CLIENT_IP[$(( i % NUM_IPS ))]} ${SERVER_IP[$(( i % NUM_IPS ))]} ${in_key} ${out_key} ${REQID_S} ${REQID_C} offload
-set_ipsec_rules ${SERVER_TRUSTED} ${SERVER_NETDEV} ${SERVER_IP[$(( i % NUM_IPS ))]} ${CLIENT_IP[$(( i % NUM_IPS ))]} ${out_key} ${in_key} ${REQID_C} ${REQID_S} offload
-new_client_IP+=( ${CLIENT_IP[$(( i % NUM_IPS ))]} )
-new_server_IP+=( ${SERVER_IP[$(( i % NUM_IPS ))]} )
+    set_ipsec_rules ${CLIENT_TRUSTED} ${CLIENT_NETDEV} ${CLIENT_IP[$(( i % NUM_IPS ))]} ${SERVER_IP[$(( i % NUM_IPS ))]} ${in_key} ${out_key} ${REQID_S} ${REQID_C} offload
+    set_ipsec_rules ${SERVER_TRUSTED} ${SERVER_NETDEV} ${SERVER_IP[$(( i % NUM_IPS ))]} ${CLIENT_IP[$(( i % NUM_IPS ))]} ${out_key} ${in_key} ${REQID_C} ${REQID_S} offload
+    new_client_IP+=( ${CLIENT_IP[$(( i % NUM_IPS ))]} )
+    new_server_IP+=( ${SERVER_IP[$(( i % NUM_IPS ))]} )
 done
 CLIENT_IP=(${new_client_IP[@]})
 SERVER_IP=(${new_server_IP[@]})
@@ -63,5 +61,3 @@ set +x
 
 remove_ipsec_rules ${CLIENT_TRUSTED}
 remove_ipsec_rules ${SERVER_TRUSTED}
-
-

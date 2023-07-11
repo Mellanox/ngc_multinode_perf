@@ -4,10 +4,10 @@
 #
 
 if [[ -z $4 ]]; then
-	echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
-	echo "		   duplex - options: HALF,FULL, default: HALF"
-	echo "		   change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
-	exit 1
+    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
+    echo "		   duplex - options: HALF,FULL, default: HALF"
+    echo "		   change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
+    exit 1
 fi
 scriptdir="$(dirname "$0")"
 source ${scriptdir}/common.sh
@@ -22,14 +22,14 @@ prep_for_tune_and_iperf_test
 #set -x
 
 if [[ -z $5 ]]; then
-	DUPLEX="HALF"
+    DUPLEX="HALF"
 else
-	DUPLEX=$5
+    DUPLEX=$5
 fi
 if [[ -z $6 ]]; then
-	CHANGE_MTU="CHANGE"
+    CHANGE_MTU="CHANGE"
 else
-	CHANGE_MTU=$6
+    CHANGE_MTU=$6
 fi
 
 LOG_CLIENT=ngc_tcp_client_${CLIENT_TRUSTED}.log
@@ -49,7 +49,7 @@ ssh ${SERVER_TRUSTED} systemctl stop irqbalance
 LINK_TYPE=`ssh ${CLIENT_TRUSTED} cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/\*/type`
 # Increase MTU to maximum per link type
 if [[ $CHANGE_MTU == "CHANGE" ]]; then
-	change_mtu	
+    change_mtu
 fi
 
 # Change number of channels to number of CPUs in the socket
@@ -62,13 +62,13 @@ ssh $SERVER_TRUSTED ethtool -L $SERVER_NETDEV combined `echo $(($SERVER_CPUCOUNT
 
 # Enable aRFS for ethernet links
 if [ $LINK_TYPE -eq 1 ]; then
-	ssh ${CLIENT_TRUSTED} "ethtool -K ${CLIENT_NETDEV} ntuple on"
-	ssh ${CLIENT_TRUSTED} "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
-	ssh ${CLIENT_TRUSTED} 'for f in /sys/class/net/"'$CLIENT_NETDEV'"/queues/rx-*/rps_flow_cnt; do echo 32768 > $f; done'
+    ssh ${CLIENT_TRUSTED} "ethtool -K ${CLIENT_NETDEV} ntuple on"
+    ssh ${CLIENT_TRUSTED} "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
+    ssh ${CLIENT_TRUSTED} 'for f in /sys/class/net/"'$CLIENT_NETDEV'"/queues/rx-*/rps_flow_cnt; do echo 32768 > $f; done'
 
-	ssh ${SERVER_TRUSTED} "ethtool -K ${SERVER_NETDEV} ntuple on"
-	ssh ${SERVER_TRUSTED} "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
-	ssh ${SERVER_TRUSTED} 'for f in /sys/class/net/"'$SERVER_NETDEV'"/queues/rx-*/rps_flow_cnt; do echo 32768 > $f; done'
+    ssh ${SERVER_TRUSTED} "ethtool -K ${SERVER_NETDEV} ntuple on"
+    ssh ${SERVER_TRUSTED} "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
+    ssh ${SERVER_TRUSTED} 'for f in /sys/class/net/"'$SERVER_NETDEV'"/queues/rx-*/rps_flow_cnt; do echo 32768 > $f; done'
 fi
 
 # Set IRQ affinity to local socket CPUs
@@ -85,14 +85,14 @@ CLIENT_LOGICAL_CORES=()
 SERVER_PHYSICAL_CORES=()
 SERVER_LOGICAL_CORES=()
 for node in $(seq $CLIENT_FIRST_SIBLING_NUMA $((CLIENT_FIRST_SIBLING_NUMA+CLIENT_LOGICAL_NUMA_PER_SOCKET-1))) ; do
-	numa_cores=($(echo "$CLIENT_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
-	CLIENT_PHYSICAL_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${numa_cores[@]:0:CLIENT_PHYSICAL_CORE_COUNT})
-	CLIENT_LOGICAL_CORES=(${CLIENT_LOGICAL_CORES[@]} ${numa_cores[@]:CLIENT_PHYSICAL_CORE_COUNT})
+    numa_cores=($(echo "$CLIENT_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
+    CLIENT_PHYSICAL_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${numa_cores[@]:0:CLIENT_PHYSICAL_CORE_COUNT})
+    CLIENT_LOGICAL_CORES=(${CLIENT_LOGICAL_CORES[@]} ${numa_cores[@]:CLIENT_PHYSICAL_CORE_COUNT})
 done
 for node in $(seq $SERVER_FIRST_SIBLING_NUMA $((SERVER_FIRST_SIBLING_NUMA+SERVER_LOGICAL_NUMA_PER_SOCKET-1))) ; do
-	numa_cores=($(echo "$SERVER_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
-	SERVER_PHYSICAL_CORES=(${SERVER_PHYSICAL_CORES[@]} ${numa_cores[@]:0:SERVER_PHYSICAL_CORE_COUNT})
-	SERVER_LOGICAL_CORES=(${SERVER_LOGICAL_CORES[@]} ${numa_cores[@]:SERVER_PHYSICAL_CORE_COUNT})
+    numa_cores=($(echo "$SERVER_NUMA_TOPO" | grep "node $node cpus" | cut -d":" -f2))
+    SERVER_PHYSICAL_CORES=(${SERVER_PHYSICAL_CORES[@]} ${numa_cores[@]:0:SERVER_PHYSICAL_CORE_COUNT})
+    SERVER_LOGICAL_CORES=(${SERVER_LOGICAL_CORES[@]} ${numa_cores[@]:SERVER_PHYSICAL_CORE_COUNT})
 done
 CLIENTS_AFFINITY_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${CLIENT_LOGICAL_CORES[@]})
 SERVER_AFFINITY_CORES=(${SERVER_PHYSICAL_CORES[@]} ${SERVER_LOGICAL_CORES[@]})
