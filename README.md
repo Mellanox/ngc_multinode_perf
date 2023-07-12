@@ -34,3 +34,4 @@ Prerequisites:
 * numactl
 * bc
 * iperf3 version >= 3.5
+* sysstat
