@@ -137,7 +137,7 @@ DMIDECODE                                       = "dmidecode"
 MST_STATUS                                      = "mst status -v"
 MST_START                                       = "mst start"
 FLINT                                           = "flint -d %s -qq q"
-IFCONFIG                                        = "ifconfig"
+IPLINK                                          = "ip l"
 ETHTOOL                                         = "ethtool"
 LSPCI                                           = "lspci"
 QDISC                                           = "tc qdisc"
@@ -147,7 +147,7 @@ OFED_PATH                                       = "which ofed_info"
 
 GET_NETWORK_PARAMETERS_CMD                      = ETHTOOL + " -%s %s"
 SET_MULTIPLE_NETWORK_PARAMETER_CMD              = ETHTOOL + " -%s %s %s"
-SET_TXQ_LENGTH_CMD                              = IFCONFIG + " %s txqueuelen %s"
+SET_TXQ_LENGTH_CMD                              = IPLINK + " set %s txqueuelen %s"
 ADD_INTERFACE_TO_QDISC_CMD                      = QDISC + " add dev %s root sfq"
 DEL_INTERFACE_FROM_QDISC_CMD                    = QDISC + " del dev %s root"
 ADD_INTERFACE_QDISC_NO_QUEUE_CMD = QDISC + " add dev %s root noqueue"
@@ -203,7 +203,7 @@ class Profile:
                                                     IP_FORWARDING_SINGLE_STREAM_SINGLE_PORT,
                                                     LOW_LATENCY_VMA, MULTICAST
                                               ]
-    NEED_IFCONFIG                           = IP_FORWARDING_SINGLE_STREAM_PROFILES + IP_FORWARDING_MULTI_STREAM_PROFILES
+    NEED_IPLINK                             = IP_FORWARDING_SINGLE_STREAM_PROFILES + IP_FORWARDING_MULTI_STREAM_PROFILES
 
 class Status:
     """ Describes a valid service status
@@ -3141,8 +3141,8 @@ def force_sw_dependencies(profile):
         logging.error( "Driver don't exist/not loaded. Please load Mellanox driver.")
 
     # Check profile specific tools
-    if profile in Profile.NEED_IFCONFIG:
-        output = run_command_exit_when_fail(IFCONFIG, error_message="Please install %s tool."%IFCONFIG)
+    if profile in Profile.NEED_IPLINK:
+        output = run_command_exit_when_fail(IPLINK, error_message="Please install iproute2.")
 
 def set_logger(options):
     """ Force dependencies between input arguments
