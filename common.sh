@@ -42,16 +42,7 @@ run_iperf2() {
 }
 
 get_average() {
-    local count total
-    count=0
-    total=0
-
-    for i in "$@"
-    do
-            total=$(echo $total+$i | bc )
-            ((count++))
-    done
-    echo "scale=2; $total / $count" | bc
+    awk "BEGIN {printf \"%.2f\n\", ($(IFS=+; printf '%s' "${*}"))/$#}"
 }
 
 get_min() {
