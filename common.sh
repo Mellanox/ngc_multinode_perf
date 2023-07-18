@@ -201,7 +201,6 @@ run_iperf3() {
 
     IPERF_TPUT=$(cat $RESULT_FILE | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } ')
     BITS=$(printf '%.0f' $IPERF_TPUT)
-    log "Throughput is: $(awk "BEGIN {printf \"%.2f\n\",${BITS}/1000000000}") Gb/s"
 
     log "${CLIENT_TRUSTED} Active cores: ${CLIENT_ACTIVE_CORES_LIST_STRING}"
     log "Active core usages on ${CLIENT_TRUSTED}"
@@ -218,5 +217,5 @@ run_iperf3() {
     TOTAL_ACTIVE_AVERAGE=$(get_average ${USAGES[@]})
     >&2 printf "Overall Active: %s\tOverall All cores: %s\n" "${TOTAL_ACTIVE_AVERAGE}" \
         "$(ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | grep all | sed 's/|/ /' | awk '{print $5}')"
-
+    log "Throughput is: $(awk "BEGIN {printf \"%.2f\n\",${BITS}/1000000000}") Gb/s"
 }
