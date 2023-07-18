@@ -19,6 +19,9 @@ KEY2=0xe7276f90cbbdfc8ca1d86fdb22f99c69da3c524f28ef4fddbcc0606f202d47828b7ddfa6
 REQID1=0x0d2425dd
 REQID2=0xb17c0ba5
 
+scriptdir="$(dirname "$0")"
+source "${scriptdir}/common.sh"
+
 setup_bf() {
     local local_IP remote_IP in_key out_key in_reqid out_reqid bf_name mtu
     local_IP=$1
@@ -85,15 +88,8 @@ SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "ls /sys/class/infiniband/${SERVER_DEVI
 CLIENT_IP="$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV} | grep -m1 -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'")"
 SERVER_IP="$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV} | grep -m1 -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'")"
 
-if [ -z "$CLIENT_IP" ]; then
-    echo "Can't find client IP, did you set IPv4 addresses?"
-    exit 1
-fi
-
-if [ -z "$SERVER_IP" ]; then
-    echo "Can't find server IP, did you set IPv4 addresses?"
-    exit 1
-fi
+[ -n "$CLIENT_IP" ] || fatal "Can't find client IP, did you set IPv4 addresses?"
+[ -n "$SERVER_IP" ] || fatal "Can't find server IP, did you set IPv4 addresses?"
 
 REMOTE_BF_IP="${SERVER_IP}"
 LOCAL_BF_IP="${CLIENT_IP}"
