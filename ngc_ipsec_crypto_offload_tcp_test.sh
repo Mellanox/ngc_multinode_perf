@@ -50,11 +50,6 @@ SERVER_IP=(${new_server_IP[@]})
 ssh "${CLIENT_TRUSTED}" ip link set dev "${CLIENT_NETDEV}" up
 ssh "${SERVER_TRUSTED}" ip link set dev "${SERVER_NETDEV}" up
 
-LOG_CLIENT="ngc_tcp_client_${CLIENT_TRUSTED}.log"
-LOG_SERVER="ngc_tcp_server_${SERVER_TRUSTED}.log"
-
-MAX_PORC=NUM_OF_TUNNELS
-
 #set_IRQ_affinity
 
 set -x
