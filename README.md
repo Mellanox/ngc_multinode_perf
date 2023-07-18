@@ -26,7 +26,7 @@ IPsec crypto offload test:
 
 Relevant for connectX-6 DX only
 will configure IPsec crypto offload on both client and server run TCP test and remove IPsec configuration
-usage: ./ngc_ipsec_crypto_offload_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device] [client bluefield hostname/ip] [server bluefield hostname/ip] [number of tunnels]
+usage: ./ngc_ipsec_crypto_offload_tcp_test.sh [client ip] [client ib device] [server ip] [server ib device] [number of tunnels]
 number of tunnels should not exceed number of IPs configured on  NICs
 
 Prerequisites:

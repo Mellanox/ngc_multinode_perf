@@ -2,10 +2,8 @@
 # NGC Certification IPsec crypto offload test v0.1
 # Owner: dorko@nvidia.com
 
-if [[ -z $5 ]]; then
-    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
-    echo "           duplex - options: HALF,FULL, default: HALF"
-    echo "           change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
+if (( $# != 5 )); then
+    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> <number of tunnels>"
     exit 1
 fi
 
