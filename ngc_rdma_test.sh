@@ -1,5 +1,8 @@
 #!/bin/bash
 
+scriptdir="$(dirname "$0")"
+source "${scriptdir}/common.sh"
+
 show_help()
 {
     cat <<EOF >&2
@@ -79,7 +82,7 @@ run_perftest(){
         wait "${bg2_pid}"
         if (( $(ssh "${CLIENT_IP}" -l root "cat /tmp/bandwidth_${CLIENT_DEVICES[1]}") != 0 ))
         then
-            echo "Device ${CLIENT_DEVICES[1]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
+            log "Device ${CLIENT_DEVICES[1]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
             PASS=1
         fi
         ssh "${CLIENT_IP}" -l root "rm -f /tmp/bandwidth_${CLIENT_DEVICES[1]}"
@@ -88,7 +91,7 @@ run_perftest(){
     wait "${bg_pid}"
     if (( $(ssh "${CLIENT_IP}" -l root "cat /tmp/bandwidth_${CLIENT_DEVICES[0]}") != 0 ))
     then
-        echo "Device ${CLIENT_DEVICES[0]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
+        log "Device ${CLIENT_DEVICES[0]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
         PASS=1
     fi
     ssh "${CLIENT_IP}" -l root "rm -f /tmp/bandwidth_${CLIENT_DEVICES[0]}"
@@ -132,7 +135,7 @@ if [ "${CLIENT_IP}" = "${SERVER_IP}" ] && [ "${SERVER_NUMA_NODE}" = "${CLIENT_NU
     CLIENT_CORES_START_INDEX=$((SERVER_CORES_START_INDEX + NUM_CONNECTIONS))
 
     if (( ${#SERVER_CORES_ARR[@]} < 5 )); then
-        echo "Warning: there are not enough CPUs on NUMA to run isolated processes, this may impact performance."
+        log "Warning: there are not enough CPUs on NUMA to run isolated processes, this may impact performance."
         NOT_ENOUGH_CORES=0
     fi
 fi
@@ -169,8 +172,8 @@ for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
     done
 
     if (( PASS == 0 )); then
-        echo "NGC ${TEST} Passed"
+        log "NGC ${TEST} Passed"
     else
-        echo "NGC ${TEST} Failed"
+        log "NGC ${TEST} Failed"
     fi
 done

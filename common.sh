@@ -5,12 +5,18 @@
 
 scriptdir="$(dirname "$0")"
 
+log() {
+    >&2 printf "%s\n" "${*}"
+}
+
+fatal() {
+    log "ERROR: ${*}"
+    exit 1
+}
+
 check_connection() {
-    if ! ssh "${CLIENT_TRUSTED}" ping "${SERVER_IP}" -c 5
-    then
-        echo "No ping from client to server, test aborted"
-        exit 1
-    fi
+    ssh "${CLIENT_TRUSTED}" ping "${SERVER_IP}" -c 5 ||
+        fatal "No ping from client to server, test aborted"
 }
 
 change_mtu() {
@@ -22,9 +28,9 @@ change_mtu() {
     ssh "${CLIENT_TRUSTED}" "echo ${MTU} > /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu"
     ssh "${SERVER_TRUSTED}" "echo ${MTU} > /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu"
     CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu")"
-    ((CURR_MTU == MTU)) || echo 'Warning, MTU was not configured correctly on Client'
+    ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Client'
     CURR_MTU="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu")"
-    ((CURR_MTU == MTU)) || echo 'Warning, MTU was not configured correctly on Server'
+    ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Server'
 }
 
 run_iperf2() {
@@ -102,14 +108,8 @@ prep_for_tune_and_iperf_test() {
     SERVER_IP=($(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV} | grep -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'"))
     CLIENT_IP=($(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV} | grep -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'"))
 
-    if [ -z "$SERVER_IP" ]; then
-        echo "Can't find server IP, did you set IPv4 address in server ?"
-        exit 1
-    fi
-    if [ -z "$CLIENT_IP" ]; then
-        echo "Can't find server IP, did you set IPv4 address in client ?"
-        exit 1
-    fi
+    [ -n "${SERVER_IP}" ] || fatal "Can't find server IP, did you set IPv4 address in server?"
+    [ -n "${CLIENT_IP}" ] || fatal "Can't find server IP, did you set IPv4 address in client?"
 
     ssh "${CLIENT_TRUSTED}" iperf3 -v
     ssh "${SERVER_TRUSTED}" iperf3 -v
@@ -137,7 +137,7 @@ prep_for_tune_and_iperf_test() {
     MIN_IDX=$(get_min ${CLIENT_FIRST_SIBLING_NUMA[@]})
     CLIENT_BASE_NUMA=${CLIENT_FIRST_SIBLING_NUMA[$MIN_IDX]}
 
-    echo "MIN_IDX $MIN_IDX, CLIENT_FIRST_SIBLING_NUMA ${CLIENT_FIRST_SIBLING_NUMA[*]} CLIENT_BASE_NUMA ${CLIENT_BASE_NUMA} CLIENT_NUMA_DISTS ${CLIENT_NUMA_DISTS[*]} CLIENT_NUMA_NODE ${CLIENT_NUMA_NODE}"
+    log "MIN_IDX $MIN_IDX, CLIENT_FIRST_SIBLING_NUMA ${CLIENT_FIRST_SIBLING_NUMA[*]} CLIENT_BASE_NUMA ${CLIENT_BASE_NUMA} CLIENT_NUMA_DISTS ${CLIENT_NUMA_DISTS[*]} CLIENT_NUMA_NODE ${CLIENT_NUMA_NODE}"
 
     # Get Server NUMA topology
     SERVER_NUMA_DISTS=( $(ssh "${SERVER_TRUSTED}" "${NUMACTL_HW[*]} | sed -n 's/${SERVER_NUMA_NODE}://p'") )
@@ -157,7 +157,7 @@ run_iperf3() {
     #check amount of IPs for interface asked, and run iperf3 mutli proccess each on another ip.
     IP_AMOUNT=$(printf "%s\n" ${#SERVER_IP[@]} ${#CLIENT_IP[@]} | sort -h | head -n1)
 
-    echo "-- starting iperf with ${PROC} processes ${THREADS} threads --"
+    log "-- starting iperf with ${PROC} processes ${THREADS} threads --"
 
     CLIENT_ACTIVE_CORES_LIST=()
     SERVER_ACTIVE_CORES_LIST=()
@@ -210,22 +210,22 @@ run_iperf3() {
 
     IPERF_TPUT=$(cat $RESULT_FILE | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } ')
     BITS=$(printf '%.0f' $IPERF_TPUT)
-    echo "Throughput is: $(awk "BEGIN {printf \"%.2f\n\",${BITS}/1000000000}") Gb/s"
+    log "Throughput is: $(awk "BEGIN {printf \"%.2f\n\",${BITS}/1000000000}") Gb/s"
 
-    echo "${CLIENT_TRUSTED} Active cores: ${CLIENT_ACTIVE_CORES_LIST_STRING}"
-    echo "Active core usages on ${CLIENT_TRUSTED}"
-    ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | sed 's/|/ /' | awk '{print $2 "\t" $5}'
+    log "${CLIENT_TRUSTED} Active cores: ${CLIENT_ACTIVE_CORES_LIST_STRING}"
+    log "Active core usages on ${CLIENT_TRUSTED}"
+    ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | sed 's/|/ /' | awk '{print $2 "\t" $5}' >&2
     USAGES=($(ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | tail -n +2 | sed 's/|/ /' | awk '{print $5}'))
     TOTAL_ACTIVE_AVERAGE=$(get_average ${USAGES[@]})
-    paste <(echo "Overall Active: ${TOTAL_ACTIVE_AVERAGE}") <(echo "Overall All cores: ") \
-        <(ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | grep all | sed 's/|/ /' | awk '{print $5}')
+    >&2 printf "Overall Active: %s\tOverall All cores: %s\n" "${TOTAL_ACTIVE_AVERAGE}" \
+        "$(ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | grep all | sed 's/|/ /' | awk '{print $5}')"
 
-    echo "${SERVER_TRUSTED} Active cores: ${SERVER_ACTIVE_CORES_LIST_STRING}"
-    echo "Active core usages on ${SERVER_TRUSTED}"
-    ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | sed 's/|/ /' | awk '{print $2 "\t" $5}'
+    log "${SERVER_TRUSTED} Active cores: ${SERVER_ACTIVE_CORES_LIST_STRING}"
+    log "Active core usages on ${SERVER_TRUSTED}"
+    ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | sed 's/|/ /' | awk '{print $2 "\t" $5}' >&2
     USAGES=($(ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | tail -n +2 | sed 's/|/ /' | awk '{print $5}'))
     TOTAL_ACTIVE_AVERAGE=$(get_average ${USAGES[@]})
-    paste <(echo "Overall Active: ${TOTAL_ACTIVE_AVERAGE}") <(echo "Overall All cores: ") \
-        <(ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | grep all | sed 's/|/ /' | awk '{print $5}')
+    >&2 printf "Overall Active: %s\tOverall All cores: %s\n" "${TOTAL_ACTIVE_AVERAGE}" \
+        "$(ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | grep all | sed 's/|/ /' | awk '{print $5}')"
 
 }
