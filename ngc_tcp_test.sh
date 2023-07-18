@@ -26,8 +26,6 @@ prep_for_tune_and_iperf_test
 [ -n "${DUPLEX}" ]     || DUPLEX="HALF"
 [ -n "${CHANGE_MTU}" ] || CHANGE_MTU="CHANGE"
 
-LOG_CLIENT="ngc_tcp_client_${CLIENT_TRUSTED}.log"
-LOG_SERVER="ngc_tcp_server_${SERVER_TRUSTED}.log"
 CLIENT_CORE_USAGES_FILE="/tmp/ngc_client_core_usages.log"
 SERVER_CORE_USAGES_FILE="/tmp/ngc_server_core_usages.log"
 CLIENT_ALL_CORE_USAGES_FILE="/tmp/ngc_all_client_core_usages.log"
