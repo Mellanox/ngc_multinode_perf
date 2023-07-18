@@ -36,7 +36,7 @@ setup_bf() {
     ssh "${bf_name}" sudo -i /bin/bash mst start
     pciconf=$(ssh "${bf_name}" sudo -i find /dev/mst/ | grep -G  "pciconf0$")
     ssh "${bf_name}" sudo -i /bin/bash mlxprivhost -d "${pciconf}" r --disable_port_owner
-    ssh "${bf_name}" sudo -i ifconfig "${PF0}" mtu "${MTU_SIZE}"
+    ssh "${bf_name}" sudo -i ip l set "${PF0}" mtu "${MTU_SIZE}"
 
     # Enable IPsec full offload
     ssh "${bf_name}" sudo -i /bin/bash << 'EOF'
@@ -102,5 +102,5 @@ echo configure ipsec
 setup_bf "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}" "${MTU_SIZE}"
 setup_bf "${REMOTE_BF_IP}" "${LOCAL_BF_IP}" "${KEY2}" "${KEY1}" "${REQID2}" "${REQID1}" "${REMOTE_BF}" "${MTU_SIZE}"
 
-ssh "${CLIENT_TRUSTED}" "ifconfig ${CLIENT_NETDEV} ${CLIENT_IP}/24 mtu $(( MTU_SIZE - 500 )) up"
-ssh "${SERVER_TRUSTED}" "ifconfig ${SERVER_NETDEV} ${SERVER_IP}/24 mtu $(( MTU_SIZE - 500 )) up"
+ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV} up; ip l set ${CLIENT_NETDEV} mtu $(( MTU_SIZE - 500 )); ip a add ${CLIENT_IP}/24 dev ${CLIENT_NETDEV}"
+ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV} up; ip l set ${SERVER_NETDEV} mtu $(( MTU_SIZE - 500 )); ip a add ${SERVER_IP}/24 dev ${SERVER_NETDEV}"
