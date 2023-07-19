@@ -83,6 +83,22 @@ get_n_min_distances() {
     echo "${mins[@]}"
 }
 
+get_server_client_ips_and_ifs() {
+    CLIENT_NETDEV="$(ssh "${CLIENT_TRUSTED}" "ls /sys/class/infiniband/${CLIENT_DEVICE}/device/net")"
+    SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "ls /sys/class/infiniband/${SERVER_DEVICE}/device/net")"
+
+    [ -n "${SERVER_NETDEV}" ] ||
+        fatal "Can't find server net device. Did you mean to specify IB device as '${SERVER_DEVICE}'?"
+    [ -n "${CLIENT_NETDEV}" ] ||
+        fatal "Can't find client net device. Did you mean to specify IB device as '${CLIENT_DEVICE}'?"
+
+    readarray -t SERVER_IP < <(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV} | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+'")
+    readarray -t CLIENT_IP < <(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV} | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+'")
+
+    ((${#SERVER_IP[@]} != 0)) || fatal "Can't find server IP, did you set IPv4 address in server?"
+    ((${#CLIENT_IP[@]} != 0)) || fatal "Can't find server IP, did you set IPv4 address in client?"
+}
+
 prep_for_tune_and_iperf_test() {
 
     ssh "${CLIENT_TRUSTED}" pkill iperf3
@@ -93,14 +109,7 @@ prep_for_tune_and_iperf_test() {
     SERVER_NUMA_NODE="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/infiniband/${SERVER_DEVICE}/device/numa_node")"
     ((SERVER_NUMA_NODE != -1)) || SERVER_NUMA_NODE="0"
 
-    CLIENT_NETDEV="$(ssh "${CLIENT_TRUSTED}" "ls /sys/class/infiniband/${CLIENT_DEVICE}/device/net")"
-    SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "ls /sys/class/infiniband/${SERVER_DEVICE}/device/net")"
-
-    SERVER_IP=($(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV} | grep -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'"))
-    CLIENT_IP=($(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV} | grep -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'"))
-
-    [ -n "${SERVER_IP}" ] || fatal "Can't find server IP, did you set IPv4 address in server?"
-    [ -n "${CLIENT_IP}" ] || fatal "Can't find server IP, did you set IPv4 address in client?"
+    get_server_client_ips_and_ifs
 
     ssh "${CLIENT_TRUSTED}" iperf3 -v
     ssh "${SERVER_TRUSTED}" iperf3 -v
