@@ -82,17 +82,10 @@ EOF
 EOF
 }
 
-CLIENT_NETDEV="$(ssh "${CLIENT_TRUSTED}" "ls /sys/class/infiniband/${CLIENT_DEVICE}/device/net")"
-SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "ls /sys/class/infiniband/${SERVER_DEVICE}/device/net")"
+get_server_client_ips_and_ifs
 
-CLIENT_IP="$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV} | grep -m1 -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'")"
-SERVER_IP="$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV} | grep -m1 -ioP  '(?<=inet )\d+\.\d+\.\d+\.\d+'")"
-
-[ -n "$CLIENT_IP" ] || fatal "Can't find client IP, did you set IPv4 addresses?"
-[ -n "$SERVER_IP" ] || fatal "Can't find server IP, did you set IPv4 addresses?"
-
-REMOTE_BF_IP="${SERVER_IP}"
-LOCAL_BF_IP="${CLIENT_IP}"
+REMOTE_BF_IP="${SERVER_IP[0]}"
+LOCAL_BF_IP="${CLIENT_IP[0]}"
 
 echo configure ipsec
 setup_bf "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}" "${MTU_SIZE}"
