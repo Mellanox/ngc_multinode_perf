@@ -91,5 +91,5 @@ echo configure ipsec
 setup_bf "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}" "${MTU_SIZE}"
 setup_bf "${REMOTE_BF_IP}" "${LOCAL_BF_IP}" "${KEY2}" "${KEY1}" "${REQID2}" "${REQID1}" "${REMOTE_BF}" "${MTU_SIZE}"
 
-ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV} up; ip l set ${CLIENT_NETDEV} mtu $(( MTU_SIZE - 500 )); ip a add ${CLIENT_IP}/24 dev ${CLIENT_NETDEV}"
-ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV} up; ip l set ${SERVER_NETDEV} mtu $(( MTU_SIZE - 500 )); ip a add ${SERVER_IP}/24 dev ${SERVER_NETDEV}"
+ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV} up; ip l set ${CLIENT_NETDEV} mtu $(( MTU_SIZE - 500 ))"
+ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV} up; ip l set ${SERVER_NETDEV} mtu $(( MTU_SIZE - 500 ))"
