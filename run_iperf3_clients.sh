@@ -1,14 +1,14 @@
 #!/bin/bash
 
-RESULT_FILE=/tmp/ngc_run_result.log
-PROC=$1
-NUMA_NODE=$2
-LOGICAL_NUMA_PER_SOCKET=$3
-BASE_NUMA=$4
-IP=$5
-BASE_TCP_PORT=$6
-THREADS=$7
-TIME=$8
+RESULT_FILE=$1
+PROC=$2
+NUMA_NODE=$3
+LOGICAL_NUMA_PER_SOCKET=$4
+BASE_NUMA=$5
+IP=$6
+BASE_TCP_PORT=$7
+THREADS=$8
+TIME=$9
 
 for P in $(seq 0 $((PROC-1)))
     do ( sleep 0.1
