@@ -234,5 +234,7 @@ run_iperf3() {
     TOTAL_ACTIVE_AVERAGE=$(get_average ${USAGES[@]})
     >&2 printf "Overall Active: %s\tOverall All cores: %s\n" "${TOTAL_ACTIVE_AVERAGE}" \
         "$(ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | grep all | sed 's/|/ /' | awk '{print $5}')"
-    log "Throughput is: $(awk "BEGIN {printf \"%.2f\n\",${BITS}/1000000000}") Gb/s"
+    rates=("$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICE}")" "$(get_port_rate "${SERVER_TRUSTED}" "${SERVER_DEVICE}")")
+    min_rate=${rates[$(get_min ${rates[@]})]}
+    log "Throughput is: $(awk "BEGIN {printf \"%.2f\n\",${BITS}/1000000000}") Gb/s (maximal expected line rate is: ${min_rate} Gb/s)."
 }
