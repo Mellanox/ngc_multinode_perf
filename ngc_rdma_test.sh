@@ -158,10 +158,12 @@ fi
 
 #---------------------Expected speed--------------------
 # Set pass rate to 90% of the bidirectional link speed
-BW_PASS_RATE=$(echo 2*0.9*"$(ssh "${CLIENT_IP}" -l root cat /sys/class/infiniband/"${CLIENT_DEVICES[0]}"/ports/1/rate)" | awk '{ print $1}' | bc -l )
+port_rate=$(get_port_rate "${CLIENT_IP}" "${CLIENT_DEVICES[0]}")
+BW_PASS_RATE="$(awk "BEGIN {printf \"%.2f\n\", 2*0.9*${port_rate}}")"
 
 if (( NUM_CONNECTIONS == 2 )); then
-    BW_PASS_RATE2=$(echo 2*0.9*"$(ssh "${CLIENT_IP}" -l root cat /sys/class/infiniband/"${CLIENT_DEVICES[1]}"/ports/1/rate)" | awk '{ print $1}' | bc -l )
+    port_rate2=$(get_port_rate "${CLIENT_IP}" "${CLIENT_DEVICES[1]}")
+    BW_PASS_RATE2="$(awk "BEGIN {printf \"%.2f\n\", 2*0.9*${port_rate2}}")"
 fi
 
 #---------------------Run Benchmark--------------------
