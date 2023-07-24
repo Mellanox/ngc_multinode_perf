@@ -45,6 +45,14 @@ get_average() {
     awk "BEGIN {printf \"%.2f\n\", ($(IFS=+; printf '%s' "${*}"))/$#}"
 }
 
+get_port_rate() {
+    local host device
+    host="${1}"
+    device="${2}"
+
+    ssh "${host}" "cat /sys/class/infiniband/${device}/ports/1/rate" | cut -d' ' -f1
+}
+
 get_min() {
     local distances min_idx min_val
     distances=($@)
