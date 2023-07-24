@@ -40,7 +40,7 @@ setup_bf() {
     ssh "${bf_name}" sudo -i /bin/bash mst start
     pciconf=$(ssh "${bf_name}" sudo -i find /dev/mst/ | grep -G  "pciconf0$")
     ssh "${bf_name}" sudo -i /bin/bash mlxprivhost -d "${pciconf}" r --disable_port_owner
-    ssh "${bf_name}" sudo -i ip l set "${PF0}" mtu "${MTU_SIZE}"
+    ssh "${bf_name}" sudo -i ip l set "${PF0}" mtu "${mtu}"
 
     # Enable IPsec full offload
     remove_ipsec_rules "${bf_name}"
@@ -73,7 +73,7 @@ EOF
 
     echo setting IPsec rules
     # Add states and policies on ARM host for IPsec.
-    set_ipsec_rules "${bf_name}" "p0" "${local_IP}" "${remote_IP}" "${in_key}" \
+    set_ipsec_rules "${bf_name}" "${PF0}" "${local_IP}" "${remote_IP}" "${in_key}" \
         "${out_key}" "${in_reqid}" "${out_reqid}" "full_offload"
 }
 
