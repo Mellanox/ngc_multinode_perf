@@ -13,8 +13,8 @@ MTU_SIZE=$7
 
 # Configure IPsec unaware mode
 if [ -z "${MTU_SIZE}" ]; then
-    net_name="$(ssh "${CLIENT_TRUSTED}" "ls -l /sys/class/infiniband/${CLIENT_DEVICE}/device/net/ | tail -1 | cut -d' ' -f9")"
-    MTU_SIZE="$(ssh "${CLIENT_TRUSTED}" "ip addr | grep mtu | grep ${net_name} | cut -d' ' -f5")"
+    net_name="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${CLIENT_DEVICE}/device/net/ | tail -1")"
+    MTU_SIZE="$(ssh "${CLIENT_TRUSTED}" "ip a show ${net_name} | awk '/mtu/{print \$5}'")"
 fi
 
 scriptdir="$(dirname "$0")"
