@@ -216,8 +216,7 @@ run_iperf3() {
     ssh "${SERVER_TRUSTED}" "sar -u -P ${SERVER_ACTIVE_CORES_LIST_STRING},all ${DURATION} 1 | grep 'Average' | head -n $((PROC + 1)) > ${SERVER_CORE_USAGES_FILE}$$" &
     wait
 
-    IPERF_TPUT=$(ssh "${CLIENT_TRUSTED}" "cat ${RESULT_FILE}" | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } ')
-    BITS=$(printf '%.0f' $IPERF_TPUT)
+    BITS=$(ssh "${CLIENT_TRUSTED}" "jq -s '[.[].end.sum_sent.bits_per_second] | add' <\"${RESULT_FILE}\"")
 
     log "${CLIENT_TRUSTED} Active cores: ${CLIENT_ACTIVE_CORES_LIST_STRING}"
     log "Active core usages on ${CLIENT_TRUSTED}"
