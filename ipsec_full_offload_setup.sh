@@ -24,15 +24,9 @@ source "${scriptdir}/common.sh"
 source "${scriptdir}/ipsec_configuration.sh"
 
 setup_bf() {
-    local local_IP remote_IP in_key out_key in_reqid out_reqid bf_name mtu
-    local_IP=$1
-    remote_IP=$2
-    in_key=$3
-    out_key=$4
-    in_reqid=$5
-    out_reqid=$6
-    bf_name=$7
-    mtu=$8
+    local bf_name mtu
+    bf_name=$1
+    mtu=$2
 
     # Restricting host and setting interfaces
     # To revert privilges (host restriction) use the following command:
@@ -70,8 +64,19 @@ echo dmfs > /sys/bus/pci/devices/0000\:03\:00.0/net/p0/compat/devlink/steering_m
 devlink dev eswitch set pci/0000:03:00.0 mode switchdev
 systemctl restart openvswitch-switch.service
 EOF
+}
 
-    echo setting IPsec rules
+setup_bf_ipsec_rules() {
+    local local_IP remote_IP in_key out_key in_reqid out_reqid bf_name
+    local_IP=$1
+    remote_IP=$2
+    in_key=$3
+    out_key=$4
+    in_reqid=$5
+    out_reqid=$6
+    bf_name=$7
+
+    log "Setting IPsec rules for ${bf_name}..."
     # Add states and policies on ARM host for IPsec.
     set_ipsec_rules "${bf_name}" "${PF0}" "${local_IP}" "${remote_IP}" "${in_key}" \
         "${out_key}" "${in_reqid}" "${out_reqid}" "full_offload"
@@ -83,8 +88,10 @@ REMOTE_BF_IP="${SERVER_IP[0]}"
 LOCAL_BF_IP="${CLIENT_IP[0]}"
 
 echo configure ipsec
-setup_bf "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}" "${MTU_SIZE}"
-setup_bf "${REMOTE_BF_IP}" "${LOCAL_BF_IP}" "${KEY2}" "${KEY1}" "${REQID2}" "${REQID1}" "${REMOTE_BF}" "${MTU_SIZE}"
+setup_bf "${LOCAL_BF}" "${MTU_SIZE}"
+setup_bf "${REMOTE_BF}" "${MTU_SIZE}"
+setup_bf_ipsec_rules "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}"
+setup_bf_ipsec_rules "${REMOTE_BF_IP}" "${LOCAL_BF_IP}" "${KEY2}" "${KEY1}" "${REQID2}" "${REQID1}" "${REMOTE_BF}"
 
 ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV} up; ip l set ${CLIENT_NETDEV} mtu $(( MTU_SIZE - 500 ))"
 ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV} up; ip l set ${SERVER_NETDEV} mtu $(( MTU_SIZE - 500 ))"
