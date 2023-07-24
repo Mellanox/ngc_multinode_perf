@@ -4,6 +4,7 @@
 
 * Passwordless root access to the participating nodes
 * numactl
+* jq
 * iperf3 version >= 3.5
 * sysstat
 
