@@ -21,6 +21,7 @@ REQID2=0xb17c0ba5
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
+source "${scriptdir}/ipsec_configuration.sh"
 
 setup_bf() {
     local local_IP remote_IP in_key out_key in_reqid out_reqid bf_name mtu
@@ -42,9 +43,8 @@ setup_bf() {
     ssh "${bf_name}" sudo -i ip l set "${PF0}" mtu "${MTU_SIZE}"
 
     # Enable IPsec full offload
+    remove_ipsec_rules "${bf_name}"
     ssh "${bf_name}" sudo -i /bin/bash << 'EOF'
-ip xfrm state flush
-ip xfrm policy flush
 ovs-appctl exit --cleanup
 /sbin/mlnx-sf -a show | grep -q 'UUID:' && \
 {
@@ -73,13 +73,8 @@ EOF
 
     echo setting IPsec rules
     # Add states and policies on ARM host for IPsec.
-    ssh "${bf_name}" sudo -i /bin/bash << EOF
-/opt/mellanox/iproute2/sbin/ip xfrm state add src ${local_IP}/24 dst ${remote_IP}/24 proto esp spi ${out_reqid} reqid ${out_reqid} mode transport aead 'rfc4106(gcm(aes))' ${out_key} 128 full_offload dev p0 dir out sel src ${local_IP} dst ${remote_IP}
-/opt/mellanox/iproute2/sbin/ip xfrm state add src ${remote_IP}/24 dst ${local_IP}/24 proto esp spi ${in_reqid} reqid ${in_reqid} mode transport aead 'rfc4106(gcm(aes))' ${in_key} 128 full_offload dev p0 dir in sel src ${remote_IP} dst ${local_IP}
-/opt/mellanox/iproute2/sbin/ip xfrm policy add src ${local_IP} dst ${remote_IP} dir out tmpl src ${local_IP}/24 dst ${remote_IP}/24 proto esp reqid ${out_reqid} mode transport
-/opt/mellanox/iproute2/sbin/ip xfrm policy add src ${remote_IP} dst ${local_IP} dir in tmpl src ${remote_IP}/24 dst ${local_IP}/24 proto esp reqid ${in_reqid} mode transport
-/opt/mellanox/iproute2/sbin/ip xfrm policy add src ${remote_IP} dst ${local_IP} dir fwd tmpl src ${remote_IP}/24 dst ${local_IP}/24 proto esp reqid ${in_reqid} mode transport
-EOF
+    set_ipsec_rules "${bf_name}" "p0" "${local_IP}" "${remote_IP}" "${in_key}" \
+        "${out_key}" "${in_reqid}" "${out_reqid}" "full_offload"
 }
 
 get_server_client_ips_and_ifs
