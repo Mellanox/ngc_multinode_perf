@@ -28,8 +28,6 @@ prep_for_tune_and_iperf_test
 
 CLIENT_CORE_USAGES_FILE="/tmp/ngc_client_core_usages.log"
 SERVER_CORE_USAGES_FILE="/tmp/ngc_server_core_usages.log"
-CLIENT_ALL_CORE_USAGES_FILE="/tmp/ngc_all_client_core_usages.log"
-SERVER_ALL_CORE_USAGES_FILE="/tmp/ngc_all_server_core_usages.log"
 
 # uncomment if needed: Run iperf2 for reference before any change
 # run_iperf2
