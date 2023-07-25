@@ -98,19 +98,68 @@ get_n_min_distances() {
 }
 
 get_server_client_ips_and_ifs() {
-    CLIENT_NETDEV="$(ssh "${CLIENT_TRUSTED}" "ls /sys/class/infiniband/${CLIENT_DEVICE}/device/net")"
-    SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "ls /sys/class/infiniband/${SERVER_DEVICE}/device/net")"
+    local cdev sdev i
 
-    [ -n "${SERVER_NETDEV}" ] ||
-        fatal "Can't find server net device. Did you mean to specify IB device as '${SERVER_DEVICE}'?"
-    [ -n "${CLIENT_NETDEV}" ] ||
-        fatal "Can't find client net device. Did you mean to specify IB device as '${CLIENT_DEVICE}'?"
+    (( $(awk -F',' '{print NF}' <<<"${CLIENT_DEVICE}") == $(awk -F',' '{print NF}' <<<"${SERVER_DEVICE}") )) ||
+        fatal "The number of client and server devices must be equal."
 
-    readarray -t SERVER_IP < <(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV} | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+'")
-    readarray -t CLIENT_IP < <(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV} | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+'")
+    case "${CLIENT_DEVICE}" in
+        *","*)
+            client_devices=(${CLIENT_DEVICE//,/ })
+            CLIENT_NETDEV=()
+            CLIENT_IP=()
+            for cdev in "${client_devices[@]}"
+            do
+                CLIENT_NETDEV+=("$(ssh "${CLIENT_TRUSTED}" "ls /sys/class/infiniband/${cdev}/device/net")")
+                [ -n "${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}" ] ||
+                    fatal "Can't find a client net device associated with the IB device '${cdev}'."
+                CLIENT_IP+=("$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
+                [ -z "${CLIENT_IP[${#CLIENT_IP[@]}-1]}" ] &&
+                    fatal "Can't find a client IP associated with the net device '${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}'." ||
+                    log "INFO: Found $(awk -F',' '{print NF}' <<<"${CLIENT_IP[${#CLIENT_IP[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}'."
+            done
+            ;;
+        *)
+            CLIENT_NETDEV="$(ssh "${CLIENT_TRUSTED}" "ls /sys/class/infiniband/${CLIENT_DEVICE}/device/net")"
+            [ -n "${CLIENT_NETDEV}" ] ||
+                fatal "Can't find client net device. Did you mean to specify IB device as '${CLIENT_DEVICE}'?"
 
-    ((${#SERVER_IP[@]} != 0)) || fatal "Can't find server IP, did you set IPv4 address in server?"
-    ((${#CLIENT_IP[@]} != 0)) || fatal "Can't find server IP, did you set IPv4 address in client?"
+            readarray -t CLIENT_IP < <(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+')
+            ((${#CLIENT_IP[@]} != 0)) || fatal "Can't find client IP, did you set IPv4 address in client?"
+            ;;
+    esac
+
+    case "${SERVER_DEVICE}" in
+        *","*)
+            server_devices=(${SERVER_DEVICE//,/ })
+            SERVER_NETDEV=()
+            SERVER_IP=()
+            for sdev in "${server_devices[@]}"
+            do
+                SERVER_NETDEV+=("$(ssh "${SERVER_TRUSTED}" "ls /sys/class/infiniband/${sdev}/device/net")")
+                [ -n "${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}" ] ||
+                    fatal "Can't find a server net device associated with the IB device '${sdev}'."
+                SERVER_IP+=("$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
+                [ -z "${SERVER_IP[${#SERVER_IP[@]}-1]}" ] &&
+                    fatal "Can't find a server IP associated with the net device '${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}'." ||
+                    log "INFO: Found $(awk -F',' '{print NF}' <<<"${SERVER_IP[${#SERVER_IP[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}'."
+            done
+            ;;
+        *)
+            SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "ls /sys/class/infiniband/${SERVER_DEVICE}/device/net")"
+            [ -n "${SERVER_NETDEV}" ] ||
+                fatal "Can't find server net device. Did you mean to specify IB device as '${SERVER_DEVICE}'?"
+
+            readarray -t SERVER_IP < <(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+')
+            ((${#SERVER_IP[@]} != 0)) || fatal "Can't find server IP, did you set IPv4 address in server?"
+            ;;
+    esac
+
+    for i in "${!CLIENT_NETDEV[@]}"
+    do
+        (( $(awk -F',' '{print NF}' <<<"${CLIENT_IP[$i]}") == $(awk -F',' '{print NF}' <<<"${SERVER_IP[$i]}") )) ||
+            fatal "The number of IPs on client interface ${CLIENT_NETDEV[$i]} does not match this on server interface ${SERVER_NETDEV[$i]}."
+    done
 }
 
 prep_for_tune_and_iperf_test() {

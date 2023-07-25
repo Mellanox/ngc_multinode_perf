@@ -11,14 +11,21 @@ LOCAL_BF=$5
 REMOTE_BF=$6
 MTU_SIZE=$7
 
-# Configure IPsec unaware mode
-if [ -z "${MTU_SIZE}" ]; then
-    net_name="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${CLIENT_DEVICE}/device/net/ | tail -1")"
-    MTU_SIZE="$(ssh "${CLIENT_TRUSTED}" "ip a show ${net_name} | awk '/mtu/{print \$5}'")"
-fi
-
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/ipsec_configuration.sh"
+source "${scriptdir}/common.sh"
+
+# Configure IPsec unaware mode
+client_devices=(${CLIENT_DEVICE/,/ })
+mtu_sizes=()
+if [ -z "${MTU_SIZE}" ]; then
+    for dev in "${client_devices[@]}"
+    do
+        net_name="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${dev}/device/net/ | tail -1")"
+        mtu_sizes+=("$(ssh "${CLIENT_TRUSTED}" "ip a show ${net_name} | awk '/mtu/{print \$5}'")")
+    done
+    MTU_SIZE="$(get_min_val ${mtu_sizes[@]})"
+fi
 
 bash "${scriptdir}/ipsec_full_offload_setup.sh" "${CLIENT_TRUSTED}" \
     "${CLIENT_DEVICE}" "${SERVER_TRUSTED}" "${SERVER_DEVICE}" "${LOCAL_BF}" \
