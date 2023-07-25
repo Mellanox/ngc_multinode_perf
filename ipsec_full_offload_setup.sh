@@ -82,14 +82,17 @@ setup_bf_ipsec_rules() {
 
 get_server_client_ips_and_ifs
 
-REMOTE_BF_IP="${SERVER_IP[0]}"
-LOCAL_BF_IP="${CLIENT_IP[0]}"
-
-echo configure ipsec
 setup_bf "${LOCAL_BF}" "${MTU_SIZE}"
 setup_bf "${REMOTE_BF}" "${MTU_SIZE}"
-setup_bf_ipsec_rules "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}"
-setup_bf_ipsec_rules "${REMOTE_BF_IP}" "${LOCAL_BF_IP}" "${KEY2}" "${KEY1}" "${REQID2}" "${REQID1}" "${REMOTE_BF}"
 
-ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV} up; ip l set ${CLIENT_NETDEV} mtu $(( MTU_SIZE - 500 ))"
-ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV} up; ip l set ${SERVER_NETDEV} mtu $(( MTU_SIZE - 500 ))"
+for i in "${!CLIENT_NETDEV[@]}"
+do
+    REMOTE_BF_IP="${SERVER_IP[$i]%%,*}"
+    LOCAL_BF_IP="${CLIENT_IP[$i]%%,*}"
+
+    setup_bf_ipsec_rules "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}"
+    setup_bf_ipsec_rules "${REMOTE_BF_IP}" "${LOCAL_BF_IP}" "${KEY2}" "${KEY1}" "${REQID2}" "${REQID1}" "${REMOTE_BF}"
+
+    ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV[$i]} up; ip l set ${CLIENT_NETDEV[$i]} mtu $(( MTU_SIZE - 500 ))"
+    ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV[$i]} up; ip l set ${SERVER_NETDEV[$i]} mtu $(( MTU_SIZE - 500 ))"
+done

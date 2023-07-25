@@ -19,6 +19,9 @@ SERVER_DEVICE=$4
 DUPLEX=$5
 CHANGE_MTU=$6
 
+grep -vq ',' <<<"${CLIENT_DEVICE}${SERVER_DEVICE}" ||
+    fatal "Multiple devices are not supported in ${0##*/} yet."
+
 prep_for_tune_and_iperf_test
 
 #set -x
