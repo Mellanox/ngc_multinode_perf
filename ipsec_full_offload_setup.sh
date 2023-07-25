@@ -13,7 +13,6 @@ REMOTE_BF=$6
 MTU_SIZE=$7
 
 PF0=p0
-VF0_REP='pf0hpf'
 KEY1=0x6b58214a0ded001ed0fec88131addb4eba92301e8afa50287dd75e4ed89d7521070831e4
 KEY2=0xe7276f90cbbdfc8ca1d86fdb22f99c69da3c524f28ef4fddbcc0606f202d47828b7ddfa6
 REQID1=0x0d2425dd
@@ -55,7 +54,6 @@ ovs-appctl exit --cleanup
     for sf_index in $(/sbin/mlnx-sf -a show | awk '/SF Index:/{print $3}' 2>/dev/null)
     do
         /sbin/mlnx-sf -a delete --sfindex "${sf_index}"
-        SF_REMOVED=1
     done
 }
 devlink dev eswitch set pci/0000:03:00.0 mode legacy
