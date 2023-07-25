@@ -58,7 +58,7 @@ get_min() {
     distances=($@)
     min_idx=0
     min_val=$1
-    for i in $(seq 0 $((${#distances[@]}-1))); do
+    for i in "${!distances[@]}"; do
         if (( ${distances[$i]} < min_val )); then
             min_idx=$i
             min_val=${distances[$i]}
