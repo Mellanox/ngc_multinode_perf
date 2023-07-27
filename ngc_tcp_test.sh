@@ -36,8 +36,8 @@ SERVER_CORE_USAGES_FILE="/tmp/ngc_server_core_usages.log"
 # run_iperf2
 
 # Stop IRQ balancer service
-ssh "${CLIENT_TRUSTED}" systemctl stop irqbalance
-ssh "${SERVER_TRUSTED}" systemctl stop irqbalance
+ssh "${CLIENT_TRUSTED}" sudo systemctl stop irqbalance
+ssh "${SERVER_TRUSTED}" sudo systemctl stop irqbalance
 
 LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/type")"
 # Increase MTU to maximum per link type
@@ -54,18 +54,18 @@ for N in $(seq "${SERVER_BASE_NUMA}" $((SERVER_BASE_NUMA+SERVER_LOGICAL_NUMA_PER
 do
     SERVER_CPUCOUNT=$((SERVER_CPUCOUNT+$(ssh "${SERVER_TRUSTED}" "ls -1 /sys/devices/system/node/node${N}/" | grep -c 'cpu[0-9]\+')))
 done
-ssh "${CLIENT_TRUSTED}" ethtool -L "${CLIENT_NETDEV}" combined "$((CLIENT_CPUCOUNT<CLIENT_PRESET_MAX ? CLIENT_CPUCOUNT : CLIENT_PRESET_MAX))"
-ssh "${SERVER_TRUSTED}" ethtool -L "${SERVER_NETDEV}" combined "$((SERVER_CPUCOUNT<SERVER_PRESET_MAX ? SERVER_CPUCOUNT : SERVER_PRESET_MAX))"
+ssh "${CLIENT_TRUSTED}" sudo ethtool -L "${CLIENT_NETDEV}" combined "$((CLIENT_CPUCOUNT<CLIENT_PRESET_MAX ? CLIENT_CPUCOUNT : CLIENT_PRESET_MAX))"
+ssh "${SERVER_TRUSTED}" sudo ethtool -L "${SERVER_NETDEV}" combined "$((SERVER_CPUCOUNT<SERVER_PRESET_MAX ? SERVER_CPUCOUNT : SERVER_PRESET_MAX))"
 
 # Enable aRFS for ethernet links
 if [ ${LINK_TYPE} -eq 1 ]; then
-    ssh "${CLIENT_TRUSTED}" "ethtool -K ${CLIENT_NETDEV} ntuple on"
-    ssh "${CLIENT_TRUSTED}" "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
-    ssh "${CLIENT_TRUSTED}" "for f in /sys/class/net/${CLIENT_NETDEV}/queues/rx-*/rps_flow_cnt; do echo '32768' > \${f}; done"
+    ssh "${CLIENT_TRUSTED}" "sudo ethtool -K ${CLIENT_NETDEV} ntuple on"
+    ssh "${CLIENT_TRUSTED}" "sudo bash -c 'echo 32768 > /proc/sys/net/core/rps_sock_flow_entries'"
+    ssh "${CLIENT_TRUSTED}" "for f in /sys/class/net/${CLIENT_NETDEV}/queues/rx-*/rps_flow_cnt; do sudo bash -c \"echo '32768' > \${f}\"; done"
 
-    ssh "${SERVER_TRUSTED}" "ethtool -K ${SERVER_NETDEV} ntuple on"
-    ssh "${SERVER_TRUSTED}" "echo 32768 > /proc/sys/net/core/rps_sock_flow_entries"
-    ssh "${SERVER_TRUSTED}" "for f in /sys/class/net/${SERVER_NETDEV}/queues/rx-*/rps_flow_cnt; do echo '32768' > \${f}; done"
+    ssh "${SERVER_TRUSTED}" "sudo ethtool -K ${SERVER_NETDEV} ntuple on"
+    ssh "${SERVER_TRUSTED}" "sudo bash -c 'echo 32768 > /proc/sys/net/core/rps_sock_flow_entries'"
+    ssh "${SERVER_TRUSTED}" "for f in /sys/class/net/${SERVER_NETDEV}/queues/rx-*/rps_flow_cnt; do sudo bash -c \"echo '32768' > \${f}\"; done"
 fi
 
 # Set IRQ affinity to local socket CPUs
@@ -98,13 +98,13 @@ SERVER_AFFINITY_CORES=(${SERVER_PHYSICAL_CORES[@]} ${SERVER_LOGICAL_CORES[@]})
 CLIENT_AFFINITY_IRQ_COUNT=$((CLIENT_CPUCOUNT<CLIENT_PRESET_MAX ? CLIENT_CPUCOUNT : CLIENT_PRESET_MAX))
 SERVER_AFFINITY_IRQ_COUNT=$((SERVER_CPUCOUNT<SERVER_PRESET_MAX ? SERVER_CPUCOUNT : SERVER_PRESET_MAX))
 
-ssh "${CLIENT_TRUSTED}" set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CLIENTS_AFFINITY_CORES[@]::CLIENT_AFFINITY_IRQ_COUNT}")" "${CLIENT_NETDEV}"
-ssh "${SERVER_TRUSTED}" set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${SERVER_AFFINITY_CORES[@]::SERVER_AFFINITY_IRQ_COUNT}")" "${SERVER_NETDEV}"
+ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CLIENTS_AFFINITY_CORES[@]::CLIENT_AFFINITY_IRQ_COUNT}")" "${CLIENT_NETDEV}"
+ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${SERVER_AFFINITY_CORES[@]::SERVER_AFFINITY_IRQ_COUNT}")" "${SERVER_NETDEV}"
 
 # Toggle interfaces down/up so channels allocation will be according to actual IRQ affinity
-ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV} down; ip l set  ${SERVER_NETDEV} up"
+ssh "${SERVER_TRUSTED}" "sudo ip l set ${SERVER_NETDEV} down; sudo ip l set ${SERVER_NETDEV} up"
 sleep 2
-ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV} down; ip l set  ${CLIENT_NETDEV} up"
+ssh "${CLIENT_TRUSTED}" "sudo ip l set ${CLIENT_NETDEV} down; sudo ip l set ${CLIENT_NETDEV} up"
 sleep 2
 
 run_iperf3

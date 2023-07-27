@@ -25,8 +25,8 @@ change_mtu() {
     elif [ "${LINK_TYPE}" -eq 32 ]; then
         MTU=4092
     fi
-    ssh "${CLIENT_TRUSTED}" "echo ${MTU} > /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu"
-    ssh "${SERVER_TRUSTED}" "echo ${MTU} > /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu"
+    ssh "${CLIENT_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu'"
+    ssh "${SERVER_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu'"
     CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/*/mtu")"
     ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Client'
     CURR_MTU="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/infiniband/${SERVER_DEVICE}/device/net/*/mtu")"

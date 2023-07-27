@@ -30,14 +30,14 @@ setup_bf() {
     # Restricting host and setting interfaces
     # To revert privilges (host restriction) use the following command:
     # mlxprivhost -d /dev/mst/${pciconf} p
-    ssh "${bf_name}" sudo -i /bin/bash mst start
-    pciconf=$(ssh "${bf_name}" sudo -i find /dev/mst/ | grep -G  "pciconf0$")
-    ssh "${bf_name}" sudo -i /bin/bash mlxprivhost -d "${pciconf}" r --disable_port_owner
-    ssh "${bf_name}" sudo -i ip l set "${PF0}" mtu "${mtu}"
+    ssh "${bf_name}" sudo mst start
+    pciconf=$(ssh "${bf_name}" find /dev/mst/ | grep -G  "pciconf0$")
+    ssh "${bf_name}" sudo mlxprivhost -d "${pciconf}" r --disable_port_owner
+    ssh "${bf_name}" sudo ip l set "${PF0}" mtu "${mtu}"
 
     # Enable IPsec full offload
     remove_ipsec_rules "${bf_name}"
-    ssh "${bf_name}" sudo -i /bin/bash << 'EOF'
+    ssh "${bf_name}" sudo -i bash << 'EOF'
 ovs-appctl exit --cleanup
 /sbin/mlnx-sf -a show | grep -q 'UUID:' && \
 {
@@ -93,6 +93,6 @@ do
     setup_bf_ipsec_rules "${LOCAL_BF_IP}" "${REMOTE_BF_IP}" "${KEY1}" "${KEY2}" "${REQID1}" "${REQID2}" "${LOCAL_BF}"
     setup_bf_ipsec_rules "${REMOTE_BF_IP}" "${LOCAL_BF_IP}" "${KEY2}" "${KEY1}" "${REQID2}" "${REQID1}" "${REMOTE_BF}"
 
-    ssh "${CLIENT_TRUSTED}" "ip l set ${CLIENT_NETDEV[$i]} up; ip l set ${CLIENT_NETDEV[$i]} mtu $(( MTU_SIZE - 500 ))"
-    ssh "${SERVER_TRUSTED}" "ip l set ${SERVER_NETDEV[$i]} up; ip l set ${SERVER_NETDEV[$i]} mtu $(( MTU_SIZE - 500 ))"
+    ssh "${CLIENT_TRUSTED}" "sudo ip l set ${CLIENT_NETDEV[$i]} up; sudo ip l set ${CLIENT_NETDEV[$i]} mtu $(( MTU_SIZE - 500 ))"
+    ssh "${SERVER_TRUSTED}" "sudo ip l set ${SERVER_NETDEV[$i]} up; sudo ip l set ${SERVER_NETDEV[$i]} mtu $(( MTU_SIZE - 500 ))"
 done
