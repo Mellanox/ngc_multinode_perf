@@ -99,8 +99,8 @@ run_perftest(){
 
 #---------------------Cores Selection--------------------
 # get device local numa node
-if ssh  "${SERVER_IP}" "test -e /sys/class/infiniband/${SERVER_DEVICES[0]}/device/numa_node"; then
-    SERVER_NUMA_NODE=$(ssh "${SERVER_IP}" "cat /sys/class/infiniband/${SERVER_DEVICES[0]}/device/numa_node")
+if SERVER_NUMA_NODE=$(ssh "${SERVER_IP}" "cat /sys/class/infiniband/${SERVER_DEVICES[0]}/device/numa_node 2>/dev/null")
+then
     if [[ $SERVER_NUMA_NODE == "-1" ]]; then
         SERVER_NUMA_NODE="0"
     fi
@@ -108,8 +108,8 @@ else
     SERVER_NUMA_NODE="0"
 fi
 
-if ssh "${CLIENT_IP}" "test -e /sys/class/infiniband/${CLIENT_DEVICES[0]}/device/numa_node"; then
-    CLIENT_NUMA_NODE=$(ssh "${CLIENT_IP}" "cat /sys/class/infiniband/${CLIENT_DEVICES[0]}/device/numa_node")
+if CLIENT_NUMA_NODE=$(ssh "${CLIENT_IP}" "cat /sys/class/infiniband/${CLIENT_DEVICES[0]}/device/numa_node 2>/dev/null")
+then
     if [[ $CLIENT_NUMA_NODE == "-1" ]]; then
         CLIENT_NUMA_NODE="0"
     fi
