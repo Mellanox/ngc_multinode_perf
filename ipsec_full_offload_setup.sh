@@ -27,12 +27,7 @@ setup_bf() {
     bf_name=$1
     mtu=$2
 
-    # Restricting host and setting interfaces
-    # To revert privilges (host restriction) use the following command:
-    # mlxprivhost -d /dev/mst/${pciconf} p
     ssh "${bf_name}" sudo mst start
-    pciconf=$(ssh "${bf_name}" find /dev/mst/ | grep -G  "pciconf0$")
-    ssh "${bf_name}" sudo mlxprivhost -d "${pciconf}" r --disable_port_owner
     ssh "${bf_name}" sudo ip l set "${PF0}" mtu "${mtu}"
 
     # Enable IPsec full offload
