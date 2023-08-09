@@ -14,8 +14,8 @@ Syntax: $0 <client hostname> <client ib device1>[,client ib device2]  <server ho
 Options:
 	use_cuda : add this flag to run perftest benchamrks on GPUs 
 Please note that when running 2 devices on each side we expect it to be doul-port
-Example:(Run on 2 ports with cuda devices)
-$0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4 use_cuda
+Example:(Run on 2 ports)
+$0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
 
 EOF
 }
@@ -37,12 +37,15 @@ then
     exit 1
 fi
 #Check if need to run on GPU
-if (( $# == 5 )) && [ "${5}" = "use_cuda" ] ; 
-then 
-    RUN_WITH_CUDA=0
-else
-    show_help
-    exit 1
+if (( $# == 5 )) 
+then
+    if [ "${5}" = "use_cuda" ]
+    then 
+        RUN_WITH_CUDA=0
+    else
+	show_help
+        exit 1
+    fi
 fi
 
 check_if_number(){
