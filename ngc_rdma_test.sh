@@ -10,33 +10,41 @@ Run RDMA test
 
 Passwordless root access to the participating nodes
 installed : numctl,perftest
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2] [cuda_index,..] <server hostname> <server ib device1>[,server ib device2] [cuda_index,..]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2]  <server hostname> <server ib device1>[,server ib device2] [use_cuda]
+Options:
+	use_cuda : add this flag to run perftest benchamrks on GPUs 
 Please note that when running 2 devices on each side we expect it to be doul-port
 Example:(Run on 2 ports with cuda devices)
-$0 client mlx5_0,mlx5_1 0,1 server mlx5_3,mlx5_4 4,5
+$0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4 use_cuda
 
 EOF
 }
 
 CLIENT_IP="${1}"
 CLIENT_DEVICES=(${2//,/ })
+SERVER_IP="${3}"
+SERVER_DEVICES=(${4//,/ })
+NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
+#Defaults are not using cuda, set params as empty string
+server_cuda=""
+client_cuda=""
+server_cuda2=""
+client_cuda2=""
 
-if (( $# == 4 )); then
-    SERVER_IP="${3}"
-    SERVER_DEVICES=(${4//,/ })
-    NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
-elif (( $# == 6 )); then
-    #Run with CUDA
-    CLIENT_CUDA_DEVICES=(${3//,/ })
-    SERVER_IP="${4}"
-    SERVER_DEVICES=(${5//,/ })
-    SERVER_CUDA_DEVICES=(${6//,/ })
-    NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
+if (( $# < 4  )) || (( $# > 5 ))
+then
+    show_help
+    exit 1
+fi
+#Check if need to run on GPU
+if (( $# == 5 )) && [ "${5}" = "use_cuda" ] ; 
+then 
     RUN_WITH_CUDA=0
 else
     show_help
     exit 1
 fi
+
 check_if_number(){
 	NUM=$1
 	re='^[0-9]+$'
@@ -46,47 +54,26 @@ check_if_number(){
 }
 run_perftest(){
     local -a ms_size_time
-    local server_cuda client_cuda bg_pid bg2_pid
+    local bg_pid bg2_pid
     local REPORT_ON_SIZE="8388608"
     PKT_SIZE=${1}
     ms_size_time=("-s" "${PKT_SIZE}" "-D" "10")
-    server_cuda=""
     PASS=0
-
-    if [ $RUN_WITH_CUDA ]
-    then
-        server_cuda="--use_cuda=${SERVER_CUDA_DEVICES[0]}"
-    fi
     ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time[*]}" -b -F  -q4 --output=bandwidth "${server_cuda}" &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        server_cuda=""
-        if [ $RUN_WITH_CUDA ]
-        then
-            server_cuda="--use_cuda=${SERVER_CUDA_DEVICES[1]}"
-        fi
-        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time[*]}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda}" &
+        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time[*]}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" &
     fi
 
     #make sure server sides is open.
     sleep 2
-
-    client_cuda=""
-    if [ "$RUN_WITH_CUDA" ]
-    then
-        client_cuda="--use_cuda=${CLIENT_CUDA_DEVICES[0]}"
-    fi
+    
     #Run client
     ssh "${CLIENT_IP}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        client_cuda=""
-        if [ $RUN_WITH_CUDA ]
-        then
-            client_cuda="--use_cuda=${CLIENT_CUDA_DEVICES[1]}"
-        fi
-        ssh "${CLIENT_IP}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F -q4 -p 10001 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_IP}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
 	BW2=$(ssh "${CLIENT_IP}" "cat /tmp/perftest_${CLIENT_DEVICES[1]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1| xargs")
 	#Make sure that there is a valid BW
@@ -156,6 +143,14 @@ fi
 
 SERVER_CORE=${SERVER_CORES_ARR[SERVER_CORES_START_INDEX]}
 CLIENT_CORE=${CLIENT_CORES_ARR[CLIENT_CORES_START_INDEX]}
+if [ $RUN_WITH_CUDA ]
+then
+    CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_IP}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
+    server_cuda="--use_cuda=${CUDA_INDEX}"
+    CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_IP}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
+    client_cuda="--use_cuda=${CUDA_INDEX}"
+fi
+
 
 #if there is a second device , set cores for it. IMPORTANT:in case 2 devices on same numa and on same setup,
 #and numa is 0, then we assume there is at least 5 cores(0,1,2,3,4) on this numa to work with.
@@ -167,8 +162,14 @@ if (( NUM_CONNECTIONS == 2 )); then
         SERVER2_CORE=${SERVER_CORES_ARR[SERVER_CORES_START_INDEX+1]}
         CLIENT2_CORE=${CLIENT_CORES_ARR[CLIENT_CORES_START_INDEX+1]}
     fi
+    if [ $RUN_WITH_CUDA ]
+    then
+        CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_IP}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
+        server_cuda2="--use_cuda=${CUDA_INDEX}"
+        CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_IP}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
+        client_cuda2="--use_cuda=${CUDA_INDEX}"
+    fi 
 fi
-
 
 #---------------------Expected speed--------------------
 # Set pass rate to 90% of the bidirectional link speed
