@@ -11,6 +11,7 @@ Run RDMA test
 Passwordless root access to the participating nodes
 installed : numctl,perftest
 Syntax: $0 <client hostname> <client ib device1>[,client ib device2] [cuda_index,..] <server hostname> <server ib device1>[,server ib device2] [cuda_index,..]
+Please note that when running 2 devices on each side we expect it to be doul-port
 Example:(Run on 2 ports with cuda devices)
 $0 client mlx5_0,mlx5_1 0,1 server mlx5_3,mlx5_4 4,5
 
@@ -36,12 +37,19 @@ else
     show_help
     exit 1
 fi
-
+check_if_number(){
+	NUM=$1
+	re='^[0-9]+$'
+	if ! [[ $NUM =~ $re ]] ; then
+	    PASS=1
+	fi
+}
 run_perftest(){
     local -a ms_size_time
     local server_cuda client_cuda bg_pid bg2_pid
-
-    ms_size_time=("-s" "${1}" "-D" "10")
+    local REPORT_ON_SIZE="8388608"
+    PKT_SIZE=${1}
+    ms_size_time=("-s" "${PKT_SIZE}" "-D" "10")
     server_cuda=""
     PASS=0
 
@@ -49,7 +57,7 @@ run_perftest(){
     then
         server_cuda="--use_cuda=${SERVER_CUDA_DEVICES[0]}"
     fi
-    ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time[*]}" -b -F --limit_bw="${BW_PASS_RATE}" -q4 --output=bandwidth "${server_cuda}" &
+    ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time[*]}" -b -F  -q4 --output=bandwidth "${server_cuda}" &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
@@ -58,7 +66,7 @@ run_perftest(){
         then
             server_cuda="--use_cuda=${SERVER_CUDA_DEVICES[1]}"
         fi
-        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time[*]}" -b -F --limit_bw="${BW_PASS_RATE2}" -q4 -p 10001 --output=bandwidth "${server_cuda}" &
+        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time[*]}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda}" &
     fi
 
     #make sure server sides is open.
@@ -70,7 +78,7 @@ run_perftest(){
         client_cuda="--use_cuda=${CLIENT_CUDA_DEVICES[0]}"
     fi
     #Run client
-    ssh "${CLIENT_IP}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F --limit_bw=${BW_PASS_RATE} -q4 ${client_cuda} ; echo \$? > /tmp/bandwidth_${CLIENT_DEVICES[0]}" & bg_pid=$!
+    ssh "${CLIENT_IP}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
         client_cuda=""
@@ -78,23 +86,29 @@ run_perftest(){
         then
             client_cuda="--use_cuda=${CLIENT_CUDA_DEVICES[1]}"
         fi
-        ssh "${CLIENT_IP}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F --limit_bw=${BW_PASS_RATE2} -q4 -p 10001 ${client_cuda} ; echo \$? >/tmp/bandwidth_${CLIENT_DEVICES[1]}" & bg2_pid=$!
+        ssh "${CLIENT_IP}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F -q4 -p 10001 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
-        if (( $(ssh "${CLIENT_IP}" "cat /tmp/bandwidth_${CLIENT_DEVICES[1]}") != 0 ))
+	BW2=$(ssh "${CLIENT_IP}" "cat /tmp/perftest_${CLIENT_DEVICES[1]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1| xargs")
+	#Make sure that there is a valid BW
+	check_if_number "$BW2"
+        if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
         then
             log "Device ${CLIENT_DEVICES[1]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
             PASS=1
         fi
-        ssh "${CLIENT_IP}" "rm -f /tmp/bandwidth_${CLIENT_DEVICES[1]}"
+        ssh "${CLIENT_IP}" "rm -f /tmp/perftest_${CLIENT_DEVICES[1]}.json"
     fi
 
     wait "${bg_pid}"
-    if (( $(ssh "${CLIENT_IP}" "cat /tmp/bandwidth_${CLIENT_DEVICES[0]}") != 0 ))
+    BW=$(ssh "${CLIENT_IP}" "cat /tmp/perftest_${CLIENT_DEVICES[0]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1 | xargs")
+    #Make sure that there is a valid BW
+    check_if_number "$BW"
+    if [[ $BW -lt ${BW_PASS_RATE} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
     then
         log "Device ${CLIENT_DEVICES[0]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
         PASS=1
     fi
-    ssh "${CLIENT_IP}" "rm -f /tmp/bandwidth_${CLIENT_DEVICES[0]}"
+    ssh "${CLIENT_IP}" "rm -f /tmp/perftest_${CLIENT_DEVICES[0]}.json"
 }
 
 #---------------------Cores Selection--------------------
@@ -159,11 +173,11 @@ fi
 #---------------------Expected speed--------------------
 # Set pass rate to 90% of the bidirectional link speed
 port_rate=$(get_port_rate "${CLIENT_IP}" "${CLIENT_DEVICES[0]}")
-BW_PASS_RATE="$(awk "BEGIN {printf \"%.2f\n\", 2*0.9*${port_rate}}")"
+BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate}}")"
 
 if (( NUM_CONNECTIONS == 2 )); then
     port_rate2=$(get_port_rate "${CLIENT_IP}" "${CLIENT_DEVICES[1]}")
-    BW_PASS_RATE2="$(awk "BEGIN {printf \"%.2f\n\", 2*0.9*${port_rate2}}")"
+    BW_PASS_RATE2="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate2}}")"
 fi
 
 #---------------------Run Benchmark--------------------
