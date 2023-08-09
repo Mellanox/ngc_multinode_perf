@@ -118,8 +118,8 @@ else
 fi
 
 #get list of cores on relevent NUMA.
-readarray -t SERVER_CORES_ARR < <(ssh "${SERVER_IP}" numactl -H | grep -i "node ${SERVER_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
-readarray -t CLIENT_CORES_ARR < <(ssh "${CLIENT_IP}" numactl -H | grep -i "node ${CLIENT_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
+read -ra SERVER_CORES_ARR <<< $(ssh "${SERVER_IP}" numactl -H | grep -i "node ${SERVER_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
+read -ra CLIENT_CORES_ARR <<< $(ssh "${CLIENT_IP}" numactl -H | grep -i "node ${CLIENT_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
 
 
 #Avoid using core 0
