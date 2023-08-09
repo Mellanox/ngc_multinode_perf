@@ -6,6 +6,7 @@
 * jq
 * iperf3 version >= 3.5
 * sysstat
+* nvidia-utils (if running RDMA test with CUDA)
 
 ## Access requirements
 

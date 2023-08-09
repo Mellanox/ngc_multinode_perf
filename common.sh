@@ -292,3 +292,54 @@ run_iperf3() {
     min_rate=$(get_min_val ${rates[@]})
     log "Throughput is: $(awk "BEGIN {printf \"%.2f\n\",${BITS}/1000000000}") Gb/s (maximal expected line rate is: ${min_rate} Gb/s)."
 }
+
+
+find_cuda() {
+    SERVER_TRUSTED=$1
+    NICX=$2
+    RELATION=$3
+    CUDA_INDEX=-1
+    LINE=$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "${NICX}" | grep "${RELATION}" )
+    RES=""
+    for RL in $LINE
+    do
+       if [ "$RL" = "$RELATION" ]
+          then
+          if  [ "$RES" = "" ]
+          then
+             RES="$CUDA_INDEX"
+          else
+             RES="${RES},$CUDA_INDEX"
+          fi
+       fi
+       CUDA_INDEX=$((CUDA_INDEX+1))
+       if (( CUDA_INDEX > $((GPUS_COUNT-1)) ))
+       then
+          break
+       fi
+    done
+    if  [ "$RES" != "" ]
+    then
+       echo $RES
+       exit 0
+    fi
+}
+
+get_cudas_per_rdma_device() {
+	SERVER_TRUSTED="${1}"
+	RDMA_DEVICE="$2"
+	GPUS_COUNT=$(ssh "${SERVER_TRUSTED}" "nvidia-smi -L" | wc -l)
+	NICX="$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "$RDMA_DEVICE" | cut -d : -f 1 | xargs )"
+	if [ "$NICX" = "" ]
+	then
+        	exit 1
+	fi
+	#loop over expected relations between NIC and GPU:
+	#if there is a connection traversing at most a single PCIe bridge - PIX
+	#if there is a connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge) - PXB
+	for RELATION in "PIX" "PXB"
+	do
+        	find_cuda "$SERVER_TRUSTED" "$NICX" "$RELATION"
+	done
+	exit 1
+}
