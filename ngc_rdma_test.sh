@@ -168,9 +168,10 @@ fi
 
 #---------------------Run Benchmark--------------------
 for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
-    for ms_size in 65536 1048576 8388608
+    #Loop over size 2k up to 8M
+    for n in {1..23}
     do
-        run_perftest "${ms_size}"
+        run_perftest $((2**n))
     done
 
     if (( PASS == 0 )); then
