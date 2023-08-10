@@ -58,25 +58,24 @@ check_if_number(){
 run_perftest(){
     local -a ms_size_time
     local bg_pid bg2_pid
-    local REPORT_ON_SIZE="8388608"
-    PKT_SIZE=${1}
-    ms_size_time=("-s" "${PKT_SIZE}" "-D" "10")
+    #Run on all size, report pass/fail if 8M size reached line rate
+    ms_size_time="-a"
     PASS=0
-    ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time[*]}" -b -F  -q4 --output=bandwidth "${server_cuda}" &
+    ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time}" -b -F  -q4 --output=bandwidth "${server_cuda}" &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time[*]}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" &
+        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" &
     fi
 
     #make sure server sides is open.
     sleep 2
     
     #Run client
-    ssh "${CLIENT_IP}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
+    ssh "${CLIENT_IP}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_IP} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_IP}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time[*]} -b ${SERVER_IP} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_IP}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_IP} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
 	BW2=$(ssh "${CLIENT_IP}" "cat /tmp/perftest_${CLIENT_DEVICES[1]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1| xargs")
 	#Make sure that there is a valid BW
@@ -93,7 +92,7 @@ run_perftest(){
     BW=$(ssh "${CLIENT_IP}" "cat /tmp/perftest_${CLIENT_DEVICES[0]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1 | xargs")
     #Make sure that there is a valid BW
     check_if_number "$BW"
-    if [[ $BW -lt ${BW_PASS_RATE} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
+    if [[ $BW -lt ${BW_PASS_RATE} ]]
     then
         log "Device ${CLIENT_DEVICES[0]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
         PASS=1
@@ -184,14 +183,12 @@ if (( NUM_CONNECTIONS == 2 )); then
     BW_PASS_RATE2="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate2}}")"
 fi
 
+
 #---------------------Run Benchmark--------------------
 for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
-    #Loop over size 2k up to 8M
-    for n in {1..23}
-    do
-        run_perftest $((2**n))
-    done
-
+    
+    run_perftest
+	
     if (( PASS == 0 )); then
         log "NGC ${TEST} Passed"
     else
