@@ -41,7 +41,7 @@ if (( $# == 5 ))
 then
     if [ "${5}" = "use_cuda" ]
     then 
-        RUN_WITH_CUDA=0
+        RUN_WITH_CUDA=true
     else
 	show_help
         exit 1
@@ -52,7 +52,7 @@ check_if_number(){
 	NUM=$1
 	re='^[0-9]+$'
 	if ! [[ $NUM =~ $re ]] ; then
-	    PASS=1
+	    PASS=false
 	fi
 }
 run_perftest(){
@@ -60,7 +60,7 @@ run_perftest(){
     local bg_pid bg2_pid
     #Run on all size, report pass/fail if 8M size reached line rate
     ms_size_time="-a"
-    PASS=0
+    PASS=true
     ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time}" -b -F  -q4 --output=bandwidth "${server_cuda}" &
 
     #open server on port 2 if exists
@@ -83,7 +83,7 @@ run_perftest(){
         if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
         then
             log "Device ${CLIENT_DEVICES[1]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
-            PASS=1
+            PASS=false
         fi
         ssh "${CLIENT_IP}" "rm -f /tmp/perftest_${CLIENT_DEVICES[1]}.json"
     fi
@@ -95,7 +95,7 @@ run_perftest(){
     if [[ $BW -lt ${BW_PASS_RATE} ]]
     then
         log "Device ${CLIENT_DEVICES[0]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
-        PASS=1
+        PASS=false
     fi
     ssh "${CLIENT_IP}" "rm -f /tmp/perftest_${CLIENT_DEVICES[0]}.json"
 }
@@ -186,10 +186,15 @@ fi
 
 #---------------------Run Benchmark--------------------
 for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
-    
+    if [ $RUN_WITH_CUDA ] && [ "$TEST" = "ib_send_bw" ]
+    then
+	log "Skip ib_send_bw when running with CUDA"
+	continue
+    fi
     run_perftest
 	
-    if (( PASS == 0 )); then
+    if $PASS
+    then
         log "NGC ${TEST} Passed"
     else
         log "NGC ${TEST} Failed"
