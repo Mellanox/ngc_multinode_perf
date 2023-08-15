@@ -299,7 +299,7 @@ find_cuda() {
     NICX=$2
     RELATION=$3
     CUDA_INDEX=-1
-    LINE=$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "${NICX}" | grep "${RELATION}" )
+    LINE=$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "^${NICX}" | grep "${RELATION}" )
     RES=""
     for RL in $LINE
     do
@@ -329,7 +329,12 @@ get_cudas_per_rdma_device() {
 	SERVER_TRUSTED="${1}"
 	RDMA_DEVICE="$2"
 	GPUS_COUNT=$(ssh "${SERVER_TRUSTED}" "nvidia-smi -L" | wc -l)
-	NICX="$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "$RDMA_DEVICE" | cut -d : -f 1 | xargs )"
+	if ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -q "NIC Legend"
+	then
+            NICX="$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "$RDMA_DEVICE" | cut -d : -f 1 | xargs )"
+	else
+	    NICX="$RDMA_DEVICE"
+	fi
 	if [ "$NICX" = "" ]
 	then
         	exit 1
