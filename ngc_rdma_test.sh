@@ -61,11 +61,11 @@ run_perftest(){
     #Run on all size, report pass/fail if 8M size reached line rate
     ms_size_time="-a"
     PASS=true
-    ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time}" -b -F  -q4 --output=bandwidth "${server_cuda}" &
+    ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time}" -b -F  -q4 --output=bandwidth "${server_cuda}" >> /dev/null &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" &
+        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" >> /dev/null &
     fi
 
     #make sure server sides is open.
