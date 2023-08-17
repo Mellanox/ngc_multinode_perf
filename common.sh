@@ -178,8 +178,8 @@ prep_for_tune_and_iperf_test() {
     ssh "${SERVER_TRUSTED}" iperf3 -v
     ssh "${CLIENT_TRUSTED}" cat /proc/cmdline
     ssh "${SERVER_TRUSTED}" cat /proc/cmdline
-    ssh "${CLIENT_TRUSTED}" iperf -v
-    ssh "${SERVER_TRUSTED}" iperf -v
+    #ssh "${CLIENT_TRUSTED}" iperf -v
+    #ssh "${SERVER_TRUSTED}" iperf -v
 
     MAX_PROC=16
     THREADS=1
