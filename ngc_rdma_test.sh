@@ -20,9 +20,9 @@ $0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
 EOF
 }
 
-CLIENT_IP="${1}"
+CLIENT_TRUSTED="${1}"
 CLIENT_DEVICES=(${2//,/ })
-SERVER_IP="${3}"
+SERVER_TRUSTED="${3}"
 SERVER_DEVICES=(${4//,/ })
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
 #Defaults are not using cuda, set params as empty string
@@ -61,23 +61,23 @@ run_perftest(){
     #Run on all size, report pass/fail if 8M size reached line rate
     ms_size_time="-a"
     PASS=true
-    ssh "${SERVER_IP}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time}" -b -F  -q4 --output=bandwidth "${server_cuda}" >> /dev/null &
+    ssh "${SERVER_TRUSTED}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time}" -b -F  -q4 --output=bandwidth "${server_cuda}" >> /dev/null &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_IP}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" >> /dev/null &
+        ssh "${SERVER_TRUSTED}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" >> /dev/null &
     fi
 
     #make sure server sides is open.
     sleep 2
     
     #Run client
-    ssh "${CLIENT_IP}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_IP} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
+    ssh "${CLIENT_TRUSTED}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_IP}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_IP} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_TRUSTED}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
-	BW2=$(ssh "${CLIENT_IP}" "cat /tmp/perftest_${CLIENT_DEVICES[1]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1| xargs")
+	BW2=$(ssh "${CLIENT_TRUSTED}" "cat /tmp/perftest_${CLIENT_DEVICES[1]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1| xargs")
 	#Make sure that there is a valid BW
 	check_if_number "$BW2"
         if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
@@ -85,11 +85,11 @@ run_perftest(){
             log "Device ${CLIENT_DEVICES[1]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
             PASS=false
         fi
-        ssh "${CLIENT_IP}" "rm -f /tmp/perftest_${CLIENT_DEVICES[1]}.json"
+        ssh "${CLIENT_TRUSTED}" "rm -f /tmp/perftest_${CLIENT_DEVICES[1]}.json"
     fi
 
     wait "${bg_pid}"
-    BW=$(ssh "${CLIENT_IP}" "cat /tmp/perftest_${CLIENT_DEVICES[0]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1 | xargs")
+    BW=$(ssh "${CLIENT_TRUSTED}" "cat /tmp/perftest_${CLIENT_DEVICES[0]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1 | xargs")
     #Make sure that there is a valid BW
     check_if_number "$BW"
     if [[ $BW -lt ${BW_PASS_RATE} ]]
@@ -97,12 +97,12 @@ run_perftest(){
         log "Device ${CLIENT_DEVICES[0]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
         PASS=false
     fi
-    ssh "${CLIENT_IP}" "rm -f /tmp/perftest_${CLIENT_DEVICES[0]}.json"
+    ssh "${CLIENT_TRUSTED}" "rm -f /tmp/perftest_${CLIENT_DEVICES[0]}.json"
 }
 
 #---------------------Cores Selection--------------------
 # get device local numa node
-if SERVER_NUMA_NODE=$(ssh "${SERVER_IP}" "cat /sys/class/infiniband/${SERVER_DEVICES[0]}/device/numa_node 2>/dev/null")
+if SERVER_NUMA_NODE=$(ssh "${SERVER_TRUSTED}" "cat /sys/class/infiniband/${SERVER_DEVICES[0]}/device/numa_node 2>/dev/null")
 then
     if [[ $SERVER_NUMA_NODE == "-1" ]]; then
         SERVER_NUMA_NODE="0"
@@ -111,7 +111,7 @@ else
     SERVER_NUMA_NODE="0"
 fi
 
-if CLIENT_NUMA_NODE=$(ssh "${CLIENT_IP}" "cat /sys/class/infiniband/${CLIENT_DEVICES[0]}/device/numa_node 2>/dev/null")
+if CLIENT_NUMA_NODE=$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICES[0]}/device/numa_node 2>/dev/null")
 then
     if [[ $CLIENT_NUMA_NODE == "-1" ]]; then
         CLIENT_NUMA_NODE="0"
@@ -121,8 +121,8 @@ else
 fi
 
 #get list of cores on relevent NUMA.
-read -ra SERVER_CORES_ARR <<< $(ssh "${SERVER_IP}" numactl -H | grep -i "node ${SERVER_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
-read -ra CLIENT_CORES_ARR <<< $(ssh "${CLIENT_IP}" numactl -H | grep -i "node ${CLIENT_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
+read -ra SERVER_CORES_ARR <<< $(ssh "${SERVER_TRUSTED}" numactl -H | grep -i "node ${SERVER_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
+read -ra CLIENT_CORES_ARR <<< $(ssh "${CLIENT_TRUSTED}" numactl -H | grep -i "node ${CLIENT_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
 
 
 #Avoid using core 0
@@ -134,7 +134,7 @@ CLIENT_CORES_START_INDEX=0
 # Flag to indecate that there is not enough cores, if running on same setup that has 2 devices on same numa node.
 NOT_ENOUGH_CORES=1
 # If 2 NICs on the same setup and same NUMA then adjust client core to same core list and prevent using same core.
-if [ "${CLIENT_IP}" = "${SERVER_IP}" ] && [ "${SERVER_NUMA_NODE}" = "${CLIENT_NUMA_NODE}" ]; then
+if [ "${CLIENT_TRUSTED}" = "${SERVER_TRUSTED}" ] && [ "${SERVER_NUMA_NODE}" = "${CLIENT_NUMA_NODE}" ]; then
     CLIENT_CORES_START_INDEX=$((SERVER_CORES_START_INDEX + NUM_CONNECTIONS))
 
     if (( ${#SERVER_CORES_ARR[@]} < 5 )); then
@@ -147,9 +147,9 @@ SERVER_CORE=${SERVER_CORES_ARR[SERVER_CORES_START_INDEX]}
 CLIENT_CORE=${CLIENT_CORES_ARR[CLIENT_CORES_START_INDEX]}
 if [ $RUN_WITH_CUDA ]
 then
-    CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_IP}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
+    CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
     server_cuda="--use_cuda=${CUDA_INDEX}"
-    CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_IP}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
+    CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
     client_cuda="--use_cuda=${CUDA_INDEX}"
 fi
 
@@ -166,20 +166,20 @@ if (( NUM_CONNECTIONS == 2 )); then
     fi
     if [ $RUN_WITH_CUDA ]
     then
-        CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_IP}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
+        CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
         server_cuda2="--use_cuda=${CUDA_INDEX}"
-        CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_IP}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
+        CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
         client_cuda2="--use_cuda=${CUDA_INDEX}"
     fi 
 fi
 
 #---------------------Expected speed--------------------
 # Set pass rate to 90% of the bidirectional link speed
-port_rate=$(get_port_rate "${CLIENT_IP}" "${CLIENT_DEVICES[0]}")
+port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[0]}")
 BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate}}")"
 
 if (( NUM_CONNECTIONS == 2 )); then
-    port_rate2=$(get_port_rate "${CLIENT_IP}" "${CLIENT_DEVICES[1]}")
+    port_rate2=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[1]}")
     BW_PASS_RATE2="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate2}}")"
 fi
 
