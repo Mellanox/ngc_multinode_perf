@@ -102,9 +102,9 @@ ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CL
 ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${SERVER_AFFINITY_CORES[@]::SERVER_AFFINITY_IRQ_COUNT}")" "${SERVER_NETDEV}"
 
 # Toggle interfaces down/up so channels allocation will be according to actual IRQ affinity
-ssh "${SERVER_TRUSTED}" "sudo ip l set ${SERVER_NETDEV} down; sudo ip l set ${SERVER_NETDEV} up"
+ssh "${SERVER_TRUSTED}" "sudo ip l set ${SERVER_NETDEV} down; sudo ip l set ${SERVER_NETDEV} up; sudo ip a add ${SERVER_IP[0]}/24 broadcast + dev ${SERVER_NETDEV}"
 sleep 2
-ssh "${CLIENT_TRUSTED}" "sudo ip l set ${CLIENT_NETDEV} down; sudo ip l set ${CLIENT_NETDEV} up"
+ssh "${CLIENT_TRUSTED}" "sudo ip l set ${CLIENT_NETDEV} down; sudo ip l set ${CLIENT_NETDEV} up; sudo ip a add ${CLIENT_IP[0]}/24 broadcast + dev ${CLIENT_NETDEV}"
 sleep 2
 
 run_iperf3
