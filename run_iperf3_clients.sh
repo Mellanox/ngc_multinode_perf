@@ -17,4 +17,4 @@ for P in $(seq 0 $((PROC-1)))
              iperf3 -Z -N -i 60 -c "${IP}"  -P "${THREADS}"  -t "${TIME}" \
              -p $((BASE_TCP_PORT+P)) -J &
         )
-    done | tee "${RESULT_FILE}"
+    done | sudo tee "${RESULT_FILE}"

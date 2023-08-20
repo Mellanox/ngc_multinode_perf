@@ -61,23 +61,23 @@ run_perftest(){
     #Run on all size, report pass/fail if 8M size reached line rate
     ms_size_time="-a"
     PASS=true
-    ssh "${SERVER_TRUSTED}" numactl -C "${SERVER_CORE}" "${TEST}" -d "${SERVER_DEVICES[0]}" --report_gbit "${ms_size_time}" -b -F  -q4 --output=bandwidth "${server_cuda}" >> /dev/null &
+    ssh "${SERVER_TRUSTED}" "sudo numactl -C ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} --report_gbit ${ms_size_time} -b -F  -q4 --output=bandwidth ${server_cuda}" >> /dev/null &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_TRUSTED}" numactl -C "${SERVER2_CORE}" "${TEST}" -d "${SERVER_DEVICES[1]}" --report_gbit "${ms_size_time}" -b -F  -q4 -p 10001 --output=bandwidth "${server_cuda2}" >> /dev/null &
+        ssh "${SERVER_TRUSTED}" "sudo numactl -C ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} --report_gbit ${ms_size_time} -b -F  -q4 -p 10001 --output=bandwidth ${server_cuda2}" >> /dev/null &
     fi
 
     #make sure server sides is open.
     sleep 2
 
     #Run client
-    ssh "${CLIENT_TRUSTED}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
+    ssh "${CLIENT_TRUSTED}" "sudo numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_TRUSTED}" "numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_TRUSTED}" "sudo numactl -C ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
-	BW2=$(ssh "${CLIENT_TRUSTED}" "cat /tmp/perftest_${CLIENT_DEVICES[1]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1| xargs")
+	BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
 	#Make sure that there is a valid BW
 	check_if_number "$BW2"
         if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
@@ -85,11 +85,11 @@ run_perftest(){
             log "Device ${CLIENT_DEVICES[1]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
             PASS=false
         fi
-        ssh "${CLIENT_TRUSTED}" "rm -f /tmp/perftest_${CLIENT_DEVICES[1]}.json"
+        ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[1]}.json"
     fi
 
     wait "${bg_pid}"
-    BW=$(ssh "${CLIENT_TRUSTED}" "cat /tmp/perftest_${CLIENT_DEVICES[0]}.json | grep 'BW_average:' | awk -F: '{print \$2}' | awk -F, '{print \$1}' | cut -d. -f1 | xargs")
+    BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[0]}.json | cut -d. -f1 | xargs")
     #Make sure that there is a valid BW
     check_if_number "$BW"
     if [[ $BW -lt ${BW_PASS_RATE} ]]
@@ -97,7 +97,7 @@ run_perftest(){
         log "Device ${CLIENT_DEVICES[0]} did't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
         PASS=false
     fi
-    ssh "${CLIENT_TRUSTED}" "rm -f /tmp/perftest_${CLIENT_DEVICES[0]}.json"
+    ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[0]}.json"
 }
 
 #---------------------Cores Selection--------------------
