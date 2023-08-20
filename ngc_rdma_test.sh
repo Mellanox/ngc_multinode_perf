@@ -12,7 +12,7 @@ Passwordless root access to the participating nodes
 installed : numctl,perftest
 Syntax: $0 <client hostname> <client ib device1>[,client ib device2]  <server hostname> <server ib device1>[,server ib device2] [use_cuda]
 Options:
-	use_cuda : add this flag to run perftest benchamrks on GPUs 
+	use_cuda : add this flag to run perftest benchamrks on GPUs
 Please note that when running 2 devices on each side we expect it to be doul-port
 Example:(Run on 2 ports)
 $0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
@@ -37,10 +37,10 @@ then
     exit 1
 fi
 #Check if need to run on GPU
-if (( $# == 5 )) 
+if (( $# == 5 ))
 then
     if [ "${5}" = "use_cuda" ]
-    then 
+    then
         RUN_WITH_CUDA=true
     else
 	show_help
@@ -70,7 +70,7 @@ run_perftest(){
 
     #make sure server sides is open.
     sleep 2
-    
+
     #Run client
     ssh "${CLIENT_TRUSTED}" "numactl -C ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
@@ -170,7 +170,7 @@ if (( NUM_CONNECTIONS == 2 )); then
         server_cuda2="--use_cuda=${CUDA_INDEX}"
         CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
         client_cuda2="--use_cuda=${CUDA_INDEX}"
-    fi 
+    fi
 fi
 
 #---------------------Expected speed--------------------
@@ -192,7 +192,7 @@ for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
 	continue
     fi
     run_perftest
-	
+
     if $PASS
     then
         log "NGC ${TEST} Passed"
