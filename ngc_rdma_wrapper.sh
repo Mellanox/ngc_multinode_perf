@@ -25,8 +25,9 @@ help() {
   ${WHITE}Usage (b2b connectivity):
   $0 Server Client
   For external loopback:
-  $0 Server ${RESET}
-
+  $0 Server
+  For Hiper Servers:
+  $0 Server --hiper ${RESET}
 
 EOF
     exit 1
@@ -194,6 +195,46 @@ ngc_rdma_test_external_loopback() {
 }
 
 
+ngc_hiper_test() {
+    local use_cuda
+    # Define the pairs using regular arrays
+    pairs=(
+    "0,6"
+    "1,7"
+    "2,8"
+    "3,9"
+    "4,10"
+    "5,11"
+    )
+    if [[ "${1}" == "use_cuda" ]]; then
+        use_cuda="use_cuda"
+        echo "NGC RDMA Test (Hiper Server) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+    else
+        use_cuda=""
+        echo "NGC RDMA Test (Hiper Server) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+    fi
+
+    # Loop through pairs and send to ngc test
+    for pair in "${pairs[@]}"; do
+        # Seperate the pairs to first and second element
+        first="${pair%,*}"
+        second="${pair#*,}"
+        echo "first: $first second: $second"
+        if [[ "$first" == "1" ]]; then
+            echo -e "${WHITE}Dual Port -  1st Port: mlx5_1, mlx5_2 | 2nd Port: mlx5_7, mlx5_8 PCI: ${PCI_DEVICE2}${NC}" &>> "${LOGFILE}"
+            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_1","mlx5_2" "${SERVER_IP}" "mlx5_7","mlx5_8" ${use_cuda} &>> "${LOGFILE}"
+        # Skip to avoid duplicates of the second port
+        elif [[ "$first" == "2" ]]; then
+            continue
+        # Single Ports
+        else
+            echo -e "${WHITE}Single Port - mlx5_${first} mlx5_${second}${NC}" &>> "${LOGFILE}"
+            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_${first}" "${SERVER_IP}" "mlx5_${second}" ${use_cuda} &>> "${LOGFILE}"
+        fi
+    done
+}
+
+
 # Check for SSH connectivity
 check_ssh() {
     local failed_hosts=""
@@ -210,8 +251,8 @@ check_ssh() {
     fi
 }
 
-#TODO: Add or failed to reach statement
-# Display results (taken from the logfile)
+
+# Display results function(taken from the logfile)
 results() {
   # Read the file line by line
     echo ""
@@ -246,6 +287,15 @@ if [[ $# == 1 ]]; then
 
 # If 2 hosts provided (meaning b2b connectivity):
 elif [[ $# == 2 ]]; then
+    if [[ $2 == "--hiper" ]]; then
+        check_ssh "${SERVER_IP}"
+        # Without CUDA
+        ngc_hiper_test
+        # With CUDA
+        ngc_hiper_test "use_cuda"
+        results
+        exit 0
+    fi
     check_ssh "${SERVER_IP}" "${CLIENT_IP}"
     # Get MLNX devices (PCIe & RDMA):
     readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
