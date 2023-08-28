@@ -219,7 +219,6 @@ ngc_hiper_test() {
         # Seperate the pairs to first and second element
         first="${pair%,*}"
         second="${pair#*,}"
-        echo "first: $first second: $second"
         if [[ "$first" == "1" ]]; then
             echo -e "${WHITE}Dual Port -  1st Port: mlx5_1, mlx5_2 | 2nd Port: mlx5_7, mlx5_8 PCI: ${PCI_DEVICE2}${NC}" &>> "${LOGFILE}"
             "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_1","mlx5_2" "${SERVER_IP}" "mlx5_7","mlx5_8" ${use_cuda} &>> "${LOGFILE}"
