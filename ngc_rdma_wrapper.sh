@@ -264,8 +264,6 @@ results() {
             echo -e "${GREEN}$line${NC}"
         elif [[ $lowercase_line == *"ngc"* && $lowercase_line == *"failed"* ]]; then
             echo -e "${RED}$line${NC}"
-        elif [[ $lowercase_line == *"reach"* ]]; then
-            echo -e "${RED}$line${NC}"
         elif [[ $lowercase_line == *"cuda on"* ]]; then
             echo ""
             echo "With CUDA:"
