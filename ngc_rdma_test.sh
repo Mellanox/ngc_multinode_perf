@@ -195,8 +195,8 @@ for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
 
     if $PASS
     then
-        log "NGC ${TEST} Passed"
+        log "NGC ${TEST} Passed for devices: ${SERVER_DEVICES[@]} <-> ${CLIENT_DEVICES[@]}"
     else
-        log "NGC ${TEST} Failed"
+        log "NGC ${TEST} Failed for devices: ${SERVER_DEVICES[@]} <-> ${CLIENT_DEVICES[@]}"
     fi
 done
