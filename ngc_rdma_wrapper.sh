@@ -3,7 +3,7 @@ set -eE
 
 # Variables
 CLIENT_IP=${2}
-HOST_IP=${1}
+SERVER_IP=${1}
 WHITE='\033[1;37m'
 GREEN='\033[1;32m'
 RED='\033[1;31m'
@@ -23,9 +23,9 @@ help() {
   Note: Do not use splitters for external loopback connectivity!
 
   ${WHITE}Usage (b2b connectivity):
-  $0 Host Client
+  $0 Server Client
   For external loopback:
-  $0 Host ${RESET}
+  $0 Server ${RESET}
 
 
 EOF
@@ -46,9 +46,9 @@ ngc_rdma_test() {
     fi
 
     # Loop over the Host devices
-    for i in "${!HOST_MLNX[@]}"; do
+    for i in "${!SERVER_MLNX[@]}"; do
         # Store the current element's value in a variable
-        element="${HOST_MLNX[i]}"
+        element="${SERVER_MLNX[i]}"
 
         # Seperate the element to PCI_DEVICE and MLX
         PCI_DEVICE="$(echo "${element}" | cut -d ' ' -f 1)"
@@ -62,19 +62,19 @@ ngc_rdma_test() {
         dual_port=false
 
         # Loop and check if the current device is Dual Port
-        for device in "${HOST_MLNX[@]}"; do
+        for device in "${SERVER_MLNX[@]}"; do
             if [[ "${device}" == "${PCI_PREFIX}"*".1 "* ]]; then
                 dual_port=true
                 break
             fi
         done
 
-        # Store  the next index in the HOST_MLNX
+        # Store  the next index in the SERVER_MLNX
         next_index=$((i + 1))
-        # Determine whether there is another element in the HOST_MLNX to skip to
-        if [ "${next_index}" -lt "${#HOST_MLNX[@]}" ]; then
+        # Determine whether there is another element in the SERVER_MLNX to skip to
+        if [ "${next_index}" -lt "${#SERVER_MLNX[@]}" ]; then
             # Store the next element's value in a variable
-            next_element="${HOST_MLNX[next_index]}"
+            next_element="${SERVER_MLNX[next_index]}"
             PCI_DEVICE2="$(echo "${next_element}" | cut -d ' ' -f 1)"
             MLX2="$(echo "${next_element}" | cut -d ' ' -f 2)"
             i="${next_index}"  # Skip the next element
@@ -83,12 +83,12 @@ ngc_rdma_test() {
         # If the device is Dual Port
         if [[ $dual_port == true ]]; then
             echo -e "${WHITE}Dual Port -  1st Port: ${MLX} PCI: ${PCI_DEVICE} | 2nd Port: ${MLX2} PCI: ${PCI_DEVICE2}${NC}" &>> "${LOGFILE}"
-            "${scriptdir}/ngc_rdma_test.sh" "${HOST_IP}" "${MLX}","${MLX2}" "${CLIENT_IP}" "${MLX}","${MLX2}" ${use_cuda} &>> "${LOGFILE}"
+            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${MLX}","${MLX2}" "${CLIENT_IP}" "${MLX}","${MLX2}" ${use_cuda} &>> "${LOGFILE}"
 
         # If the device is Single Port:
         else
             echo -e "${WHITE}Single Port - ${MLX} Located on PCI: ${PCI_DEVICE}${NC}" &>> "${LOGFILE}"
-            "${scriptdir}/ngc_rdma_test.sh" "${HOST_IP}" "${MLX}" "${CLIENT_IP}" "${MLX}" ${use_cuda} &>> "${LOGFILE}"
+            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${MLX}" "${CLIENT_IP}" "${MLX}" ${use_cuda} &>> "${LOGFILE}"
         fi
     done
 }
@@ -106,14 +106,14 @@ ngc_rdma_test_external_loopback() {
     fi
 
     # Loop and store Cables SN in an array:
-    for i in "${!HOST_MLNX[@]}"; do
-        CABLE_SN="$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${HOST_IP}" mlxlink -d mlx5_$i -m | awk '/Vendor Serial Number/{print $NF}')"
+    for i in "${!SERVER_MLNX[@]}"; do
+        CABLE_SN="$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mlxlink -d mlx5_$i -m | awk '/Vendor Serial Number/{print $NF}')"
         CABLE_ARRAY+=("$CABLE_SN")
     done > /dev/null 2>&1
 
     # Save a new array, combined with the CABLE SN and MLNX devices:
-    for j in "${!HOST_MLNX[@]}"; do
-        COMBINED_ARRAY+=("${HOST_MLNX[j]} ${CABLE_ARRAY[j]}")
+    for j in "${!SERVER_MLNX[@]}"; do
+        COMBINED_ARRAY+=("${SERVER_MLNX[j]} ${CABLE_ARRAY[j]}")
     done
 
     # Loop and check for similar Cables' SN, and send it to the script
@@ -180,12 +180,12 @@ ngc_rdma_test_external_loopback() {
                     processed_array+=("$another_element")
                     echo -e "${WHITE}Dual Port -  Devices: ${mlx_element} ${dualmlx} PCI: ${pcie_element} | Devices: ${mlx2_element} ${dualmlx2} PCI: ${pcie2_element}${NC}"
                     echo -e "${WHITE}Dual Port -  Devices: ${mlx_element} ${dualmlx} PCI: ${pcie_element} | Devices: ${mlx2_element} ${dualmlx2} PCI: ${pcie2_element}${NC}" &>> "${LOGFILE}"
-                    "${scriptdir}/ngc_rdma_test.sh" "${HOST_IP}" "${mlx_element}","${dualmlx}" "${HOST_IP}" "${mlx2_element}","${dualmlx2}" ${use_cuda} &>> "${LOGFILE}"
+                    "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${mlx_element}","${dualmlx}" "${SERVER_IP}" "${mlx2_element}","${dualmlx2}" ${use_cuda} &>> "${LOGFILE}"
 
                 # If the device is Single Port:
                 else
                     echo -e "${WHITE}Single Port - Device: ${mlx_element} Located on PCI: ${pcie_element}${NC}" &>> "${LOGFILE}"
-                    "${scriptdir}/ngc_rdma_test.sh" "${HOST_IP}" "${mlx_element}" "${HOST_IP}" "${mlx2_element}" ${use_cuda} &>> "${LOGFILE}"
+                    "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${mlx_element}" "${SERVER_IP}" "${mlx2_element}" ${use_cuda} &>> "${LOGFILE}"
 
                 fi
             fi
@@ -236,9 +236,9 @@ results() {
 
 # If 1 host provided, run external loopback test:
 if [[ $# == 1 ]]; then
-    check_ssh "${HOST_IP}"
+    check_ssh "${SERVER_IP}"
     # Get MLNX devices (PCIe & RDMA):
-    readarray -t HOST_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${HOST_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
+    readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test_external_loopback
     # Use CUDA:
@@ -246,9 +246,9 @@ if [[ $# == 1 ]]; then
 
 # If 2 hosts provided (meaning b2b connectivity):
 elif [[ $# == 2 ]]; then
-    check_ssh "${HOST_IP}" "${CLIENT_IP}"
+    check_ssh "${SERVER_IP}" "${CLIENT_IP}"
     # Get MLNX devices (PCIe & RDMA):
-    readarray -t HOST_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${HOST_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
+    readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test
     # Use CUDA
