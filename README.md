@@ -52,10 +52,9 @@ aggregated throughput is in Gb/s.
 
 ## IPsec full offload test
 
-* Relevant for BlueField-2 DPUs.
-* This test supports single port only.
+* This test currently supports single port only.
 
-Will configure IPsec full offload on both client and server BlueField-2, and then run TCP test.
+Will configure IPsec full offload on both client and server DPU, and then run a TCP test.
 
 ### Usage:
 
