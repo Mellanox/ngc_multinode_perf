@@ -287,7 +287,8 @@ elif [[ $# == 2 ]]; then
     # Check if --hiper argument was passed
     if [[ $2 == "--hiper" ]]; then
         check_ssh "${SERVER_IP}"
-        ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial &>> "${LOGFILE}"
+        ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
+        ssh "${SERVER_IP}" dmidecode -t 0 |grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
         # Without CUDA
         ngc_hiper_test
         # With CUDA
