@@ -40,7 +40,7 @@ ngc_rdma_test() {
     local element
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="use_cuda"
-        echo "NGC RDMA Test (Back2Back) in progress ... (CUDA on)" | tee -a "${LOGFILE}"
+        echo "NGC RDMA Test (Back2Back) in progress... (CUDA on)" | tee -a "${LOGFILE}"
     else
         use_cuda=""
         echo "NGC RDMA Test (Back2Back) in progress... (CUDA off)" | tee -a "${LOGFILE}"
@@ -194,7 +194,7 @@ ngc_rdma_test_external_loopback() {
     done
 }
 
-
+# Hiper Server Function
 ngc_hiper_test() {
     local use_cuda
     # Define the pairs using regular arrays
@@ -284,8 +284,10 @@ if [[ $# == 1 ]]; then
 
 # If 2 hosts provided (meaning b2b connectivity):
 elif [[ $# == 2 ]]; then
+    # Check if --hiper argument was passed
     if [[ $2 == "--hiper" ]]; then
         check_ssh "${SERVER_IP}"
+        ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial &>> "${LOGFILE}"
         # Without CUDA
         ngc_hiper_test
         # With CUDA
