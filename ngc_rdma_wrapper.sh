@@ -26,8 +26,8 @@ help() {
   $0 Server Client
   For external loopback:
   $0 Server
-  For Hiper Servers:
-  $0 Server --hiper ${RESET}
+  For ISR1 Servers:
+  $0 Server --isr1 ${RESET}
 
 EOF
     exit 1
@@ -194,8 +194,8 @@ ngc_rdma_test_external_loopback() {
     done
 }
 
-# Hiper Server Function
-ngc_hiper_test() {
+# ISR1 Server Function
+ngc_isr1_test() {
     local use_cuda
     # Define the pairs using regular arrays
     pairs=(
@@ -208,10 +208,10 @@ ngc_hiper_test() {
     )
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="use_cuda"
-        echo "NGC RDMA Test (Hiper Server) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo "NGC RDMA Test (ISR1 Server) in progress... (CUDA on)" | tee -a "${LOGFILE}"
     else
         use_cuda=""
-        echo "NGC RDMA Test (Hiper Server) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+        echo "NGC RDMA Test (ISR1 Server) in progress... (CUDA off)" | tee -a "${LOGFILE}"
     fi
 
     # Loop through pairs and send to ngc test
@@ -284,15 +284,15 @@ if [[ $# == 1 ]]; then
 
 # If 2 hosts provided (meaning b2b connectivity):
 elif [[ $# == 2 ]]; then
-    # Check if --hiper argument was passed
-    if [[ $2 == "--hiper" ]]; then
+    # Check if --isr1 argument was passed
+    if [[ $2 == "--isr1" ]]; then
         check_ssh "${SERVER_IP}"
         ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
         ssh "${SERVER_IP}" dmidecode -t 0 |grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
         # Without CUDA
-        ngc_hiper_test
+        ngc_isr1_test
         # With CUDA
-        ngc_hiper_test "use_cuda"
+        ngc_isr1_test "use_cuda"
         results
         exit 0
     fi
