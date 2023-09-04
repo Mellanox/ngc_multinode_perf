@@ -47,7 +47,8 @@ aggregated throughput is in Gb/s.
 ```
 ./ngc_tcp_test.sh <client hostname/ip> <client ib device> <server hostname/ip> \
     <server ib device> [duplex (options: HALF (default), FULL)] \
-    [change_mtu (options: CHANGE (default), DONT_CHANGE)]
+    [change_mtu (options: CHANGE (default), DONT_CHANGE)] \
+    [duration (in seconds, default: 120)]
 ```
 
 ## IPsec full offload test
