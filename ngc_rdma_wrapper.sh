@@ -20,14 +20,12 @@ help() {
 
   Execute ngc_rdma_test.sh for each MLNX device on the hosts.
   Run as root and make sure the hosts are passwordless, you can use IP / Hostname.
-  Note: Do not use splitters for external loopback connectivity!
+  For external loopback, you may edit the pairs according to your connectivity.
 
   ${WHITE}Usage (b2b connectivity):
   $0 Server Client
   For external loopback:
   $0 Server
-  For ISR1 Servers:
-  $0 Server --isr1 ${RESET}
 
 EOF
     exit 1
@@ -94,108 +92,9 @@ ngc_rdma_test() {
     done
 }
 
-# Function to call the ngc_rdma_test.sh for each device on the host(s) - external loopback connectivity
+
+# Function to call the ngc_rdma_test.sh for each device on the host(s) - External loopback connectivity
 ngc_rdma_test_external_loopback() {
-    local use_cuda
-    local element
-    if [[ "${1}" == "use_cuda" ]]; then
-        use_cuda="use_cuda"
-        echo "NGC RDMA Test (External Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
-    else
-        use_cuda=""
-        echo "NGC RDMA Test (External Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
-    fi
-
-    # Loop and store Cables SN in an array:
-    for i in "${!SERVER_MLNX[@]}"; do
-        CABLE_SN="$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mlxlink -d mlx5_$i -m | awk '/Vendor Serial Number/{print $NF}')"
-        CABLE_ARRAY+=("$CABLE_SN")
-    done > /dev/null 2>&1
-
-    # Save a new array, combined with the CABLE SN and MLNX devices:
-    for j in "${!SERVER_MLNX[@]}"; do
-        COMBINED_ARRAY+=("${SERVER_MLNX[j]} ${CABLE_ARRAY[j]}")
-    done
-
-    # Loop and check for similar Cables' SN, and send it to the script
-    for element in "${COMBINED_ARRAY[@]}"; do
-        # Skip iteration if one of the devices have already been iterated
-        if (( ${#processed_array[@]} != 0 )) &&
-            printf '%s\n' "${processed_array[@]}" | grep -q "^\(${another_element}\|${element}\|${dualmlx2}\|${dualmlx}\)\$"; then
-            continue
-        fi
-
-        # Extract MLX and SN elements
-        pcie_element=$(echo "${element}" | awk '{print $1}')
-        mlx_element=$(echo "${element}" | awk '{print $2}')
-        sn_element="$(echo "${element}" | awk '{print $3}')"
-        PCI_PREFIX="${pcie_element%.*}"
-
-        # Skip iteration if mlx was already processed
-        if [[ "${mlx_element}" == "${dualmlx}" ]]; then
-            continue
-        fi
-
-        # Skip iteration if the 3rd element is N/A, meaning the cable is probably disconnected
-        if [[ "${sn_element}" == "N/A" ]]; then
-            continue
-        fi
-
-        # Loop to check for identical SN numbers
-        for another_element in "${COMBINED_ARRAY[@]}"; do
-            pcie2_element=$(echo "${another_element}" | awk '{print $1}')
-            mlx2_element=$(echo "${another_element}" | awk '{print $2}')
-            sn2_element="$(echo "${another_element}" | awk '{print $3}')"
-            PCI2_PREFIX="${pcie2_element%.*}"
-
-            # If the mlx device is the same, continue to next iteration
-            if [[ "${mlx2_element}" == "${mlx_element}" ]]; then
-                continue
-            fi
-            dual_port=false
-            # If the SN cable are identical - the devices are connected to each other
-            if [[ "${sn2_element}" == "${sn_element}" ]]; then
-                # Add the processed element to the array
-                processed_array+=("$another_element")
-
-                # Check for Dual Port
-                for index in "${!COMBINED_ARRAY[@]}"; do
-                    if echo "${COMBINED_ARRAY[index]}" | grep -q "${PCI_PREFIX}.1"; then
-                        dual_port_value="${COMBINED_ARRAY[index]}"
-                        dual_port=true
-                        dualmlx=$(echo "$dual_port_value" | awk '{print $2}')
-                        processed_array+=("$dualmlx")
-                        break  # Exit the loop since we found a match
-                    fi
-                done
-                for index2 in "${!COMBINED_ARRAY[@]}"; do
-                    if echo "${COMBINED_ARRAY[index2]}" | grep -q "${PCI2_PREFIX}.1"; then
-                        dual_port_value2="${COMBINED_ARRAY[index2]}"
-                        dualmlx2=$(echo "$dual_port_value2" | awk '{print $2}')
-                        processed_array+=("$dualmlx2")
-                    fi
-                done
-
-                # If the device is Dual Port
-                if [[ "${dual_port}" == true ]]; then
-                    processed_array+=("$another_element")
-                    echo -e "${WHITE}Dual Port -  Devices: ${mlx_element} ${dualmlx} PCI: ${pcie_element} | Devices: ${mlx2_element} ${dualmlx2} PCI: ${pcie2_element}${NC}"
-                    echo -e "${WHITE}Dual Port -  Devices: ${mlx_element} ${dualmlx} PCI: ${pcie_element} | Devices: ${mlx2_element} ${dualmlx2} PCI: ${pcie2_element}${NC}" &>> "${LOGFILE}"
-                    "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${mlx_element}","${dualmlx}" "${SERVER_IP}" "${mlx2_element}","${dualmlx2}" ${use_cuda} &>> "${LOGFILE}"
-
-                # If the device is Single Port:
-                else
-                    echo -e "${WHITE}Single Port - Device: ${mlx_element} Located on PCI: ${pcie_element}${NC}" &>> "${LOGFILE}"
-                    "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${mlx_element}" "${SERVER_IP}" "${mlx2_element}" ${use_cuda} &>> "${LOGFILE}"
-
-                fi
-            fi
-        done
-    done
-}
-
-# ISR1 Server Function
-ngc_isr1_test() {
     local use_cuda
     # Define the pairs using regular arrays
     pairs=(
@@ -208,10 +107,10 @@ ngc_isr1_test() {
     )
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="use_cuda"
-        echo "NGC RDMA Test (ISR1 Server) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo "NGC RDMA Test (External Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
     else
         use_cuda=""
-        echo "NGC RDMA Test (ISR1 Server) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+        echo "NGC RDMA Test (External Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
     fi
 
     # Loop through pairs and send to ngc test
@@ -276,6 +175,8 @@ results() {
 if [[ $# == 1 ]]; then
     check_ssh "${SERVER_IP}"
     # Get MLNX devices (PCIe & RDMA):
+    ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
+    ssh "${SERVER_IP}" dmidecode -t 0 |grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
     readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test_external_loopback
@@ -284,20 +185,10 @@ if [[ $# == 1 ]]; then
 
 # If 2 hosts provided (meaning b2b connectivity):
 elif [[ $# == 2 ]]; then
-    # Check if --isr1 argument was passed
-    if [[ $2 == "--isr1" ]]; then
-        check_ssh "${SERVER_IP}"
-        ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
-        ssh "${SERVER_IP}" dmidecode -t 0 |grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
-        # Without CUDA
-        ngc_isr1_test
-        # With CUDA
-        ngc_isr1_test "use_cuda"
-        results
-        exit 0
-    fi
     check_ssh "${SERVER_IP}" "${CLIENT_IP}"
     # Get MLNX devices (PCIe & RDMA):
+    ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
+    ssh "${SERVER_IP}" dmidecode -t 0 |grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
     readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test
