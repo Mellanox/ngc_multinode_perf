@@ -10,6 +10,7 @@ SERVER_DEVICE=$4
 LOCAL_BF=$5
 REMOTE_BF=$6
 MTU_SIZE=$7
+TEST_DURATION=$8
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/ipsec_configuration.sh"
@@ -33,7 +34,8 @@ bash "${scriptdir}/ipsec_full_offload_setup.sh" "${CLIENT_TRUSTED}" \
 
 # Run tcp test
 bash "${scriptdir}/ngc_tcp_test.sh" "${CLIENT_TRUSTED}" "${CLIENT_DEVICE}" \
-    "${SERVER_TRUSTED}" "${SERVER_DEVICE}" "HALF" "DONT_CHANGE"
+    "${SERVER_TRUSTED}" "${SERVER_DEVICE}" "HALF" "DONT_CHANGE" \
+    ${TEST_DURATION}
 
 remove_ipsec_rules "${LOCAL_BF}"
 remove_ipsec_rules "${REMOTE_BF}"
