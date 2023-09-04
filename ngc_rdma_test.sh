@@ -43,7 +43,7 @@ then
     then
         RUN_WITH_CUDA=true
     else
-	show_help
+        show_help
         exit 1
     fi
 fi
@@ -77,9 +77,9 @@ run_perftest(){
     if (( NUM_CONNECTIONS == 2 )); then
         ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
-	BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
-	#Make sure that there is a valid BW
-	check_if_number "$BW2"
+        BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
+        #Make sure that there is a valid BW
+        check_if_number "$BW2"
         if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
         then
             log "Device ${CLIENT_DEVICES[1]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
@@ -188,8 +188,8 @@ fi
 for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
     if [ $RUN_WITH_CUDA ] && [ "$TEST" = "ib_send_bw" ]
     then
-	log "Skip ib_send_bw when running with CUDA"
-	continue
+        log "Skip ib_send_bw when running with CUDA"
+        continue
     fi
     run_perftest
 
