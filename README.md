@@ -46,9 +46,9 @@ aggregated throughput is in Gb/s.
 
 ```
 ./ngc_tcp_test.sh <client hostname/ip> <client ib device> <server hostname/ip> \
-    <server ib device> [duplex (options: HALF (default), FULL)] \
-    [change_mtu (options: CHANGE (default), DONT_CHANGE)] \
-    [duration (in seconds, default: 120)]
+    <server ib device> [--duplex=<"HALF" (default) or "FULL">] \
+    [--change_mtu=<"CHANGE" (default) or "DONT_CHANGE">] \
+    [--duration=<in seconds, default: 120>]
 ```
 
 ## IPsec full offload test
@@ -62,8 +62,8 @@ Will configure IPsec full offload on both client and server DPU, and then run a 
 ```
 ./ngc_ipsec_full_offload_tcp_test.sh <client hostname/ip> <client ib device> \
     <server hostname/ip> <server ib device> <client bluefield hostname/ip> \
-    <server bluefield hostname/ip> [optional: mtu size] \
-    [optional: duration (in seconds, default: 120)]
+    <server bluefield hostname/ip> [--mtu=<mtu size>] \
+    [--duration=<in seconds, default: 120>]
 ```
 
 ## IPsec crypto offload test

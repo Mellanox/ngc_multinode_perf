@@ -3,18 +3,40 @@
 # Owner: dorko@nvidia.com
 #
 
+scriptdir="$(dirname "$0")"
+source "${scriptdir}/ipsec_configuration.sh"
+source "${scriptdir}/common.sh"
+
+POSITIONAL_ARGS=()
+while [ $# -gt 0 ]
+do
+    case "${1}" in
+        --mtu=*)
+            MTU_SIZE="${1#*=}"
+            shift
+            ;;
+        --duration=*)
+            # Exporting to be re-used in ngc_tcp_test.sh
+            export TEST_DURATION="${1#*=}"
+            shift
+            ;;
+        --*)
+            fatal "Unknown option ${1}"
+            ;;
+        *)
+            POSITIONAL_ARGS+=("${1}")
+            shift
+            ;;
+    esac
+done
+set -- "${POSITIONAL_ARGS[@]}"
+
 CLIENT_TRUSTED=$1
 CLIENT_DEVICE=$2
 SERVER_TRUSTED=$3
 SERVER_DEVICE=$4
 LOCAL_BF=$5
 REMOTE_BF=$6
-MTU_SIZE=$7
-TEST_DURATION=$8
-
-scriptdir="$(dirname "$0")"
-source "${scriptdir}/ipsec_configuration.sh"
-source "${scriptdir}/common.sh"
 
 # Configure IPsec unaware mode
 client_devices=(${CLIENT_DEVICE/,/ })
@@ -34,8 +56,8 @@ bash "${scriptdir}/ipsec_full_offload_setup.sh" "${CLIENT_TRUSTED}" \
 
 # Run tcp test
 bash "${scriptdir}/ngc_tcp_test.sh" "${CLIENT_TRUSTED}" "${CLIENT_DEVICE}" \
-    "${SERVER_TRUSTED}" "${SERVER_DEVICE}" "HALF" "DONT_CHANGE" \
-    ${TEST_DURATION}
+    "${SERVER_TRUSTED}" "${SERVER_DEVICE}" --duplex="HALF" \
+    --change_mtu="DONT_CHANGE"
 
 remove_ipsec_rules "${LOCAL_BF}"
 remove_ipsec_rules "${REMOTE_BF}"

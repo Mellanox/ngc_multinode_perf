@@ -4,7 +4,7 @@
 #
 
 if (($# < 4)); then
-    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu] [duration]"
+    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [--duplex=<'HALF','FULL'>] [--change_mtu=<'CHANGE','DONT_CHANGE'>] [--duration=<sec>]"
     echo "		   duplex - options: HALF,FULL, default: HALF"
     echo "		   change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
     echo "		   duration - time in seconds, default: 120"
@@ -13,13 +13,37 @@ fi
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
 
+while [ $# -gt 0 ]
+do
+    case "${1}" in
+        --duplex=*)
+            DUPLEX="${1#*=}"
+            shift
+            ;;
+        --change_mtu=*)
+            CHANGE_MTU="${1#*=}"
+            shift
+            ;;
+        --duration=*)
+            TEST_DURATION="${1#*=}"
+            shift
+            ;;
+        --*)
+            fatal "Unknown option ${1}"
+            ;;
+        *)
+            POSITIONAL_ARGS+=("${1}")
+            shift
+            ;;
+    esac
+done
+set -- "${POSITIONAL_ARGS[@]}"
+
 CLIENT_TRUSTED=$1
 CLIENT_DEVICE=$2
 SERVER_TRUSTED=$3
 SERVER_DEVICE=$4
-DUPLEX=$5
-CHANGE_MTU=$6
-[ -n "$7" ] && TEST_DURATION="$7" || TEST_DURATION="120"
+[ -n "${TEST_DURATION}" ] || TEST_DURATION="120"
 
 grep -vq ',' <<<"${CLIENT_DEVICE}${SERVER_DEVICE}" ||
     fatal "Multiple devices are not supported in ${0##*/} yet."
