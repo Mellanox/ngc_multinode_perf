@@ -19,6 +19,13 @@ check_connection() {
         fatal "No ping from client to server, test aborted"
 }
 
+check_if_number(){
+    local re num
+    num=$1
+    re='^[0-9]+$'
+    [[ $num =~ $re ]] || return 1
+}
+
 change_mtu() {
     if [ "${LINK_TYPE}" -eq 1 ]; then
         MTU=9000
