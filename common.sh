@@ -326,25 +326,25 @@ find_cuda() {
 }
 
 get_cudas_per_rdma_device() {
-	SERVER_TRUSTED="${1}"
-	RDMA_DEVICE="$2"
-	GPUS_COUNT=$(ssh "${SERVER_TRUSTED}" "nvidia-smi -L" | wc -l)
-	if ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -q "NIC Legend"
-	then
-            NICX="$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "$RDMA_DEVICE" | cut -d : -f 1 | xargs )"
-	else
-	    NICX="$RDMA_DEVICE"
-	fi
-	if [ "$NICX" = "" ]
-	then
-        	exit 1
-	fi
-	#loop over expected relations between NIC and GPU:
-	#if there is a connection traversing at most a single PCIe bridge - PIX
-	#if there is a connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge) - PXB
-	for RELATION in "PIX" "PXB"
-	do
-        	find_cuda "$SERVER_TRUSTED" "$NICX" "$RELATION"
-	done
-	exit 1
+    SERVER_TRUSTED="${1}"
+    RDMA_DEVICE="$2"
+    GPUS_COUNT=$(ssh "${SERVER_TRUSTED}" "nvidia-smi -L" | wc -l)
+    if ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -q "NIC Legend"
+    then
+        NICX="$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "$RDMA_DEVICE" | cut -d : -f 1 | xargs )"
+    else
+        NICX="$RDMA_DEVICE"
+    fi
+    if [ "$NICX" = "" ]
+    then
+        exit 1
+    fi
+    #loop over expected relations between NIC and GPU:
+    #if there is a connection traversing at most a single PCIe bridge - PIX
+    #if there is a connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge) - PXB
+    for RELATION in "PIX" "PXB"
+    do
+        find_cuda "$SERVER_TRUSTED" "$NICX" "$RELATION"
+    done
+    exit 1
 }
