@@ -48,13 +48,6 @@ then
     fi
 fi
 
-check_if_number(){
-	NUM=$1
-	re='^[0-9]+$'
-	if ! [[ $NUM =~ $re ]] ; then
-	    PASS=false
-	fi
-}
 run_perftest(){
     local -a ms_size_time
     local bg_pid bg2_pid
@@ -79,7 +72,7 @@ run_perftest(){
         wait "${bg2_pid}"
         BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
         #Make sure that there is a valid BW
-        check_if_number "$BW2"
+        check_if_number "$BW2" || PASS=false
         if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
         then
             log "Device ${CLIENT_DEVICES[1]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
@@ -91,7 +84,7 @@ run_perftest(){
     wait "${bg_pid}"
     BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[0]}.json | cut -d. -f1 | xargs")
     #Make sure that there is a valid BW
-    check_if_number "$BW"
+    check_if_number "$BW" || PASS=false
     if [[ $BW -lt ${BW_PASS_RATE} ]]
     then
         log "Device ${CLIENT_DEVICES[0]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
