@@ -190,7 +190,7 @@ prep_for_tune_and_iperf_test() {
 
     MAX_PROC=16
     THREADS=1
-    TIME=120
+    TIME="${TEST_DURATION}"
     TCP_PORT_ID="$(echo "${CLIENT_DEVICE}" | cut -d '_' -f 2)"
     TCP_PORT_ADDITION=$((TCP_PORT_ID * 100))
     BASE_TCP_PORT=$((5200 + TCP_PORT_ADDITION))

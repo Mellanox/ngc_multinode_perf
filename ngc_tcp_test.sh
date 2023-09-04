@@ -4,9 +4,10 @@
 #
 
 if (($# < 4)); then
-    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu]"
+    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [duplex] [change_mtu] [duration]"
     echo "		   duplex - options: HALF,FULL, default: HALF"
     echo "		   change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
+    echo "		   duration - time in seconds, default: 120"
     exit 1
 fi
 scriptdir="$(dirname "$0")"
@@ -18,6 +19,7 @@ SERVER_TRUSTED=$3
 SERVER_DEVICE=$4
 DUPLEX=$5
 CHANGE_MTU=$6
+[ -n "$7" ] && TEST_DURATION="$7" || TEST_DURATION="120"
 
 grep -vq ',' <<<"${CLIENT_DEVICE}${SERVER_DEVICE}" ||
     fatal "Multiple devices are not supported in ${0##*/} yet."
