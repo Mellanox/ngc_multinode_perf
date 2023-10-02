@@ -32,8 +32,8 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
 ### Usage:
 
 ```
-./ngc_rdma_test.sh <client hostname/ip> <client ib device> \
-    <server hostname/ip> <server ib device>
+./ngc_rdma_test.sh <client hostname/ip> <client ib device>[,<client ib device2>] \
+    <server hostname/ip> <server ib device>[,<server ib device2>] [use_cuda]
 ```
 
 ## TCP test
