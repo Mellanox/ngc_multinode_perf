@@ -8,12 +8,17 @@ show_help()
     cat <<EOF >&2
 Run RDMA test
 
-Passwordless root access to the participating nodes
-installed : numctl,perftest
+* Passwordless SSH access to the participating nodes is required.
+* Passwordless sudo root access is required from the SSH'ing user.
+* Dependencies which need to be installed: numctl, perftest.
+
 Syntax: $0 <client hostname> <client ib device1>[,client ib device2]  <server hostname> <server ib device1>[,server ib device2] [use_cuda]
+
 Options:
 	use_cuda : add this flag to run perftest benchamrks on GPUs
-Please note that when running 2 devices on each side we expect it to be doul-port
+
+Please note that when running 2 devices on each side we expect dual-port performance.
+
 Example:(Run on 2 ports)
 $0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
 
