@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eE
+
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
 
