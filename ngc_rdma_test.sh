@@ -2,6 +2,9 @@
 
 set -eE
 
+default_qps=4
+max_qps=64
+
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
 
@@ -11,6 +14,10 @@ do
     case "${1}" in
         --use_cuda)
             RUN_WITH_CUDA=true
+            shift
+            ;;
+        --qp=*)
+            QPS="${1#*=}"
             shift
             ;;
         --*)
@@ -33,10 +40,11 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>]
 
 Options:
 	--use_cuda : add this flag to run perftest benchamrks on GPUs
+	--qp=<num of QPs>: Use the sepecified QPs' number (default: ${default_qps}, max: ${max_qps})
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
@@ -51,6 +59,8 @@ CLIENT_DEVICES=(${2//,/ })
 SERVER_TRUSTED="${3}"
 SERVER_DEVICES=(${4//,/ })
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
+[ -n "${QPS}" ] || QPS="${default_qps}"
+(( QPS <= max_qps )) || fatal "Max allowed QPs are ${max_qps}."
 #Defaults are not using cuda, set params as empty string
 server_cuda=""
 client_cuda=""
@@ -69,21 +79,21 @@ run_perftest(){
     #Run on all size, report pass/fail if 8M size reached line rate
     ms_size_time="-a"
     PASS=true
-    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} --report_gbit ${ms_size_time} -b -F  -q4 --output=bandwidth ${server_cuda}" >> /dev/null &
+    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} --report_gbit ${ms_size_time} -b -F -q ${QPS} --output=bandwidth ${server_cuda}" >> /dev/null &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} --report_gbit ${ms_size_time} -b -F  -q4 -p 10001 --output=bandwidth ${server_cuda2}" >> /dev/null &
+        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} --report_gbit ${ms_size_time} -b -F -q ${QPS} -p 10001 --output=bandwidth ${server_cuda2}" >> /dev/null &
     fi
 
     #make sure server sides is open.
     sleep 2
 
     #Run client
-    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F  -q4 ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
+    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q ${QPS} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q4 -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q ${QPS} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
         BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
         #Make sure that there is a valid BW
