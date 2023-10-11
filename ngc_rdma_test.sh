@@ -5,6 +5,25 @@ set -eE
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
 
+POSITIONAL_ARGS=()
+while [ $# -gt 0 ]
+do
+    case "${1}" in
+        --use_cuda)
+            RUN_WITH_CUDA=true
+            shift
+            ;;
+        --*)
+            fatal "Unknown option ${1}"
+            ;;
+        *)
+            POSITIONAL_ARGS+=("${1}")
+            shift
+            ;;
+    esac
+done
+set -- "${POSITIONAL_ARGS[@]}"
+
 show_help()
 {
     cat <<EOF >&2
@@ -14,10 +33,10 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2]  <server hostname> <server ib device1>[,server ib device2] [use_cuda]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda]
 
 Options:
-	use_cuda : add this flag to run perftest benchamrks on GPUs
+	--use_cuda : add this flag to run perftest benchamrks on GPUs
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
@@ -38,21 +57,10 @@ client_cuda=""
 server_cuda2=""
 client_cuda2=""
 
-if (( $# < 4  )) || (( $# > 5 ))
+if (( $# != 4  ))
 then
     show_help
     exit 1
-fi
-#Check if need to run on GPU
-if (( $# == 5 ))
-then
-    if [ "${5}" = "use_cuda" ]
-    then
-        RUN_WITH_CUDA=true
-    else
-        show_help
-        exit 1
-    fi
 fi
 
 run_perftest(){
