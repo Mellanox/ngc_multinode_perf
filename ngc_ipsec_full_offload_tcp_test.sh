@@ -44,7 +44,7 @@ mtu_sizes=()
 if [ -z "${MTU_SIZE}" ]; then
     for dev in "${client_devices[@]}"
     do
-        net_name="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${dev}/device/net/ | tail -1")"
+        net_name="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${dev}/device/net/ | head -1")"
         mtu_sizes+=("$(ssh "${CLIENT_TRUSTED}" "ip a show ${net_name} | awk '/mtu/{print \$5}'")")
     done
     MTU_SIZE="$(get_min_val ${mtu_sizes[@]})"
