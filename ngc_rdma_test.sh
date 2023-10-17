@@ -98,6 +98,7 @@ run_perftest(){
         BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
         #Make sure that there is a valid BW
         check_if_number "$BW2" || PASS=false
+        log "Device ${CLIENT_DEVICES[1]} reached ${BW2} Gb/s (max possible: $((port_rate2 * 2)) Gb/s)"
         if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
         then
             log "Device ${CLIENT_DEVICES[1]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
@@ -110,6 +111,7 @@ run_perftest(){
     BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[0]}.json | cut -d. -f1 | xargs")
     #Make sure that there is a valid BW
     check_if_number "$BW" || PASS=false
+    log "Device ${CLIENT_DEVICES[0]} reached ${BW} Gb/s (max possible: $((port_rate * 2)) Gb/s)"
     if [[ $BW -lt ${BW_PASS_RATE} ]]
     then
         log "Device ${CLIENT_DEVICES[0]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
