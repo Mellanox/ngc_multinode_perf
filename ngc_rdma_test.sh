@@ -16,6 +16,10 @@ do
             RUN_WITH_CUDA=true
             shift
             ;;
+        --all_connection_types)
+            ALL_CONN_TYPES=true
+            shift
+            ;;
         --qp=*)
             QPS="${1#*=}"
             shift
@@ -40,11 +44,12 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types]
 
 Options:
 	--use_cuda : add this flag to run perftest benchamrks on GPUs
 	--qp=<num of QPs>: Use the sepecified QPs' number (default: ${default_qps}, max: ${max_qps})
+	--all_connection_types: check all the supported connection types for each test
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
@@ -73,27 +78,35 @@ then
     exit 1
 fi
 
+get_perftest_connect_options() {
+    local test
+
+    test="${1}"
+    "${test}" --help | awk -F'[<>]' '/--connection=/{gsub(/\//," ");gsub(/SRD/,"");print $2}'
+}
+
 run_perftest(){
-    local -a ms_size_time
+    local -a ms_size_time conn_type_cmd
     local bg_pid bg2_pid
     #Run on all size, report pass/fail if 8M size reached line rate
     ms_size_time="-a"
+    [ "${CONN_TYPE}" = "default" ] || conn_type_cmd=( "-c" "${CONN_TYPE}" )
     PASS=true
-    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} --report_gbit ${ms_size_time} -b -F -q ${QPS} --output=bandwidth ${server_cuda}" >> /dev/null &
+    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} --report_gbit ${ms_size_time} -b -F ${conn_type_cmd[*]} -q ${QPS} --output=bandwidth ${server_cuda}" >> /dev/null &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} --report_gbit ${ms_size_time} -b -F -q ${QPS} -p 10001 --output=bandwidth ${server_cuda2}" >> /dev/null &
+        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} --report_gbit ${ms_size_time} -b -F ${conn_type_cmd[*]} -q ${QPS} -p 10001 --output=bandwidth ${server_cuda2}" >> /dev/null &
     fi
 
     #make sure server sides is open.
     sleep 2
 
     #Run client
-    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q ${QPS} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
+    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} -q ${QPS} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F -q ${QPS} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --report_gbit ${ms_size_time} -b ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} -q ${QPS} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
         BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
         #Make sure that there is a valid BW
@@ -205,18 +218,27 @@ fi
 
 
 #---------------------Run Benchmark--------------------
+logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
 for TEST in ib_write_bw ib_read_bw ib_send_bw ; do
+    logstring[0]="${TEST}"
     if [ $RUN_WITH_CUDA ] && [ "$TEST" = "ib_send_bw" ]
     then
         log "Skip ib_send_bw when running with CUDA"
         continue
     fi
-    run_perftest
-
-    if $PASS
+    if [ "${ALL_CONN_TYPES}" = true ]
     then
-        log "NGC ${TEST} Passed for devices: ${SERVER_DEVICES[*]} <-> ${CLIENT_DEVICES[*]}"
+        read -ra connection_types <<<"$(get_perftest_connect_options "${TEST}")"
     else
-        log "NGC ${TEST} Failed for devices: ${SERVER_DEVICES[*]} <-> ${CLIENT_DEVICES[*]}"
+        connection_types=( "default" )
     fi
+    for CONN_TYPE in "${connection_types[@]}"
+    do
+        run_perftest
+
+        [ "${CONN_TYPE}" = "default" ] &&
+            logstring[1]="-" || logstring[1]="(connection type: ${CONN_TYPE})"
+        [ "${PASS}" = true ] && logstring[2]="Passed" || logstring[2]="Failed"
+        log "${logstring[*]}"
+    done
 done
