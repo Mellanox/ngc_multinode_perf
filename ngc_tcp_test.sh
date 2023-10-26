@@ -65,7 +65,7 @@ SERVER_CORE_USAGES_FILE="/tmp/ngc_server_core_usages.log"
 ssh "${CLIENT_TRUSTED}" sudo systemctl stop irqbalance
 ssh "${SERVER_TRUSTED}" sudo systemctl stop irqbalance
 
-LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/${CLIENT_NETDEV}/type")"
+LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEV}/type")"
 # Increase MTU to maximum per link type
 [ "${CHANGE_MTU}" != "CHANGE" ] || change_mtu
 

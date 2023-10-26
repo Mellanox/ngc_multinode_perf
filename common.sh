@@ -33,11 +33,11 @@ change_mtu() {
         MTU=4092
     fi
     # TODO: Support multiple client/server devices (when TCP test will support them)
-    ssh "${CLIENT_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/infiniband/${CLIENT_DEVICE}/device/net/${CLIENT_NETDEV}/mtu'"
-    ssh "${SERVER_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/infiniband/${SERVER_DEVICE}/device/net/${SERVER_NETDEV}/mtu'"
-    CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/net/${CLIENT_NETDEV}/mtu")"
+    ssh "${CLIENT_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/net/${CLIENT_NETDEV}/mtu'"
+    ssh "${SERVER_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/net/${SERVER_NETDEV}/mtu'"
+    CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEV}/mtu")"
     ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Client'
-    CURR_MTU="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/infiniband/${SERVER_DEVICE}/device/net/${SERVER_NETDEV}/mtu")"
+    CURR_MTU="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/net/${SERVER_NETDEV}/mtu")"
     ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Server'
 }
 
