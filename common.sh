@@ -105,6 +105,19 @@ get_n_min_distances() {
     echo "${mins[@]}"
 }
 
+get_netdev_from_ibdev() {
+    local ibdev netdev sfdev
+
+    ibdev="${1}"
+    netdev="$(ls -1 "/sys/class/infiniband/${ibdev}/device/net" | head -1)"
+    if mlnx-sf -h &> /dev/null
+    then
+        sfdev="$(mlnx-sf -ja show | jq -r --arg SF "${netdev}" '.[] | select(.netdev==$SF) | .sf_netdev')"
+    fi
+    [ -z "${sfdev}" ] || netdev="${sfdev}"
+    printf "%s" "${netdev}"
+}
+
 get_server_client_ips_and_ifs() {
     local cdev sdev i
 
@@ -118,7 +131,7 @@ get_server_client_ips_and_ifs() {
             CLIENT_IP=()
             for cdev in "${client_devices[@]}"
             do
-                CLIENT_NETDEV+=("$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${cdev}/device/net | head -1")")
+                CLIENT_NETDEV+=("$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${cdev}")")
                 [ -n "${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}" ] ||
                     fatal "Can't find a client net device associated with the IB device '${cdev}'."
                 CLIENT_IP+=("$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
@@ -128,7 +141,7 @@ get_server_client_ips_and_ifs() {
             done
             ;;
         *)
-            CLIENT_NETDEV="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${CLIENT_DEVICE}/device/net | head -1")"
+            CLIENT_NETDEV="$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${CLIENT_DEVICE}")"
             [ -n "${CLIENT_NETDEV}" ] ||
                 fatal "Can't find client net device. Did you mean to specify IB device as '${CLIENT_DEVICE}'?"
 
@@ -144,7 +157,7 @@ get_server_client_ips_and_ifs() {
             SERVER_IP=()
             for sdev in "${server_devices[@]}"
             do
-                SERVER_NETDEV+=("$(ssh "${SERVER_TRUSTED}" "ls -1 /sys/class/infiniband/${sdev}/device/net | head -1")")
+                SERVER_NETDEV+=("$(ssh "${SERVER_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${sdev}")")
                 [ -n "${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}" ] ||
                     fatal "Can't find a server net device associated with the IB device '${sdev}'."
                 SERVER_IP+=("$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
@@ -154,7 +167,7 @@ get_server_client_ips_and_ifs() {
             done
             ;;
         *)
-            SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "ls -1 /sys/class/infiniband/${SERVER_DEVICE}/device/net | head -1")"
+            SERVER_NETDEV="$(ssh "${SERVER_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${SERVER_DEVICE}")"
             [ -n "${SERVER_NETDEV}" ] ||
                 fatal "Can't find server net device. Did you mean to specify IB device as '${SERVER_DEVICE}'?"
 
