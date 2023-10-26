@@ -39,7 +39,7 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
 
 ## TCP test
 
-Will automatically detect device local NUMA node, disabled IRQ balancer,
+Will automatically detect device local NUMA node, disable IRQ balancer,
 increase MTU to max and run `iperf3` on the closest NUMA nodes. Report
 aggregated throughput is in Gb/s.
 
