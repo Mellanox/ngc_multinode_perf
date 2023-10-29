@@ -26,6 +26,20 @@ check_if_number(){
     [[ $num =~ $re ]] || return 1
 }
 
+change_local_mtu() {
+    local ibdev netdev mtu dev
+
+    ibdev="${1}"
+    netdev="${2}"
+    mtu="${3}"
+
+    echo "${mtu}" > "/sys/class/net/${netdev}/mtu"
+    for dev in "/sys/class/infiniband/${ibdev}/device/net/"*
+    do
+        echo "${mtu}" > "/sys/class/net/${dev##*/}/mtu"
+    done
+}
+
 change_mtu() {
     if [ "${LINK_TYPE}" -eq 1 ]; then
         MTU=9000
@@ -33,8 +47,8 @@ change_mtu() {
         MTU=4092
     fi
     # TODO: Support multiple client/server devices (when TCP test will support them)
-    ssh "${CLIENT_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/net/${CLIENT_NETDEV}/mtu'"
-    ssh "${SERVER_TRUSTED}" "sudo bash -c 'echo ${MTU} > /sys/class/net/${SERVER_NETDEV}/mtu'"
+    ssh "${CLIENT_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${CLIENT_DEVICE} ${CLIENT_NETDEV} ${MTU}'"
+    ssh "${SERVER_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${CLIENT_DEVICE} ${CLIENT_NETDEV} ${MTU}'"
     CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEV}/mtu")"
     ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Client'
     CURR_MTU="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/net/${SERVER_NETDEV}/mtu")"
