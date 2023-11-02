@@ -4,10 +4,14 @@
 #
 
 if (($# < 4)); then
-    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> [--duplex=<'HALF','FULL'>] [--change_mtu=<'CHANGE','DONT_CHANGE'>] [--duration=<sec>]"
+    echo "usage: $0 <client trusted ip> <client ib device>[,client ib device2] <server trusted ip> <server ib device>[,server ib device2] [--duplex=<'HALF','FULL'>] [--change_mtu=<'CHANGE','DONT_CHANGE'>] [--duration=<sec>] [--max_proc=<number>]"
     echo "		   duplex - options: HALF,FULL, default: HALF"
     echo "		   change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
     echo "		   duration - time in seconds, default: 120"
+    echo "		   max_proc - use up to max_proc of process for each port"
+    echo "		   disable_ro - add this flag as workaround for Sapphire Rapid CPU that missing/disabled the following tuning in BIOS (Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled)"
+    echo "		                You will need to restart the driver and re run again"
+    echo "		   allow_core_zero - allow binding process on core 0, default:false"
     exit 1
 fi
 scriptdir="$(dirname "$0")"
@@ -28,6 +32,18 @@ do
             TEST_DURATION="${1#*=}"
             shift
             ;;
+        --max_proc=*)
+            MAX_PROC="${1#*=}"
+            shift
+            ;;
+        --disable_ro)
+            DISABLE_RO=true
+            shift
+            ;;
+        --allow_core_zero)
+            ALLAOW_CORE_ZERO=true
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -39,103 +55,77 @@ do
 done
 set -- "${POSITIONAL_ARGS[@]}"
 
-CLIENT_TRUSTED=$1
-CLIENT_DEVICE=$2
-SERVER_TRUSTED=$3
-SERVER_DEVICE=$4
-[ -n "${TEST_DURATION}" ] || TEST_DURATION="120"
+CLIENT_TRUSTED="${1}"
+CLIENT_DEVICES=(${2//,/ })
+SERVER_TRUSTED="${3}"
+SERVER_DEVICES=(${4//,/ })
+IS_CLIENT_SPR=false
+IS_SERVER_SPR=false
 
-grep -vq ',' <<<"${CLIENT_DEVICE}${SERVER_DEVICE}" ||
-    fatal "Multiple devices are not supported in ${0##*/} yet."
 
-prep_for_tune_and_iperf_test
-
-#set -x
-
-[ -n "${DUPLEX}" ]     || DUPLEX="HALF"
+[[ "$DUPLEX" == "FULL" ]] && DUPLEX=true || DUPLEX=false
 [ -n "${CHANGE_MTU}" ] || CHANGE_MTU="CHANGE"
+[ -n "${DISABLE_RO}" ] || DISABLE_RO=false
+[ -n "${TEST_DURATION}" ] || TEST_DURATION="120"
+[ -n "${MAX_PROC}" ] || MAX_PROC="30"
+[ -n "${ALLAOW_CORE_ZERO}" ] || ALLAOW_CORE_ZERO=false
+
 
 CLIENT_CORE_USAGES_FILE="/tmp/ngc_client_core_usages.log"
 SERVER_CORE_USAGES_FILE="/tmp/ngc_server_core_usages.log"
 
-# uncomment if needed: Run iperf2 for reference before any change
-# run_iperf2
-
-# Stop IRQ balancer service
-ssh "${CLIENT_TRUSTED}" sudo systemctl stop irqbalance
-ssh "${SERVER_TRUSTED}" sudo systemctl stop irqbalance
-
-LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEV}/type")"
-# Increase MTU to maximum per link type
-[ "${CHANGE_MTU}" != "CHANGE" ] || change_mtu
-
-# Change number of channels to number of CPUs in the socket
-CLIENT_PRESET_MAX=$(ssh "${CLIENT_TRUSTED}" ethtool -l "${CLIENT_NETDEV}" | awk '/Combined/{print $2}' | head -1)
-SERVER_PRESET_MAX=$(ssh "${SERVER_TRUSTED}" ethtool -l "${SERVER_NETDEV}" | awk '/Combined/{print $2}' | head -1)
-for N in $(seq "${CLIENT_BASE_NUMA}" $((CLIENT_BASE_NUMA+CLIENT_LOGICAL_NUMA_PER_SOCKET-1)))
-do
-    CLIENT_CPUCOUNT=$((CLIENT_CPUCOUNT+$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/devices/system/node/node${N}/" | grep -c 'cpu[0-9]\+')))
-done
-for N in $(seq "${SERVER_BASE_NUMA}" $((SERVER_BASE_NUMA+SERVER_LOGICAL_NUMA_PER_SOCKET-1)))
-do
-    SERVER_CPUCOUNT=$((SERVER_CPUCOUNT+$(ssh "${SERVER_TRUSTED}" "ls -1 /sys/devices/system/node/node${N}/" | grep -c 'cpu[0-9]\+')))
-done
-ssh "${CLIENT_TRUSTED}" sudo ethtool -L "${CLIENT_NETDEV}" combined "$((CLIENT_CPUCOUNT<CLIENT_PRESET_MAX ? CLIENT_CPUCOUNT : CLIENT_PRESET_MAX))"
-ssh "${SERVER_TRUSTED}" sudo ethtool -L "${SERVER_NETDEV}" combined "$((SERVER_CPUCOUNT<SERVER_PRESET_MAX ? SERVER_CPUCOUNT : SERVER_PRESET_MAX))"
-
-# Enable aRFS for ethernet links
-if [ ${LINK_TYPE} -eq 1 ]; then
-    ssh "${CLIENT_TRUSTED}" "sudo ethtool -K ${CLIENT_NETDEV} ntuple on"
-    ssh "${CLIENT_TRUSTED}" "sudo bash -c 'echo 32768 > /proc/sys/net/core/rps_sock_flow_entries'"
-    ssh "${CLIENT_TRUSTED}" "for f in /sys/class/net/${CLIENT_NETDEV}/queues/rx-*/rps_flow_cnt; do sudo bash -c \"echo '32768' > \${f}\"; done"
-
-    ssh "${SERVER_TRUSTED}" "sudo ethtool -K ${SERVER_NETDEV} ntuple on"
-    ssh "${SERVER_TRUSTED}" "sudo bash -c 'echo 32768 > /proc/sys/net/core/rps_sock_flow_entries'"
-    ssh "${SERVER_TRUSTED}" "for f in /sys/class/net/${SERVER_NETDEV}/queues/rx-*/rps_flow_cnt; do sudo bash -c \"echo '32768' > \${f}\"; done"
+if [ "$DISABLE_RO" = true ]
+then
+    echo -e "${ORANGE}WARN: apply WA for Sapphire system - please apply the following tuning in BIOS - Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled instead of using this WA${NC}"
+    sleep 2
 fi
 
-# Set IRQ affinity to local socket CPUs
-NUMA_TOPO=("numactl" "-H")
-CLIENT_NUMA_TOPO=$(ssh "${CLIENT_TRUSTED}" "${NUMA_TOPO[*]}")
-SERVER_NUMA_TOPO=$(ssh "${SERVER_TRUSTED}" "${NUMA_TOPO[*]}")
-THREAD_PER_CORE=("lscpu" "|" "awk" "'/Thread/{print \$NF}'")
-CLIENT_THREAD_PER_CORE=$(ssh "${CLIENT_TRUSTED}" "${THREAD_PER_CORE[*]}")
-SERVER_THREAD_PER_CORE=$(ssh "${SERVER_TRUSTED}" "${THREAD_PER_CORE[*]}")
-CLIENT_PHYSICAL_CORE_COUNT=$((CLIENT_CPUCOUNT/CLIENT_LOGICAL_NUMA_PER_SOCKET/CLIENT_THREAD_PER_CORE))
-SERVER_PHYSICAL_CORE_COUNT=$((SERVER_CPUCOUNT/SERVER_LOGICAL_NUMA_PER_SOCKET/SERVER_THREAD_PER_CORE))
-CLIENT_PHYSICAL_CORES=()
-CLIENT_LOGICAL_CORES=()
-SERVER_PHYSICAL_CORES=()
-SERVER_LOGICAL_CORES=()
-for node in $(seq "${CLIENT_FIRST_SIBLING_NUMA}" $((CLIENT_FIRST_SIBLING_NUMA+CLIENT_LOGICAL_NUMA_PER_SOCKET-1)))
-do
-    numa_cores=($(echo "${CLIENT_NUMA_TOPO}" | grep "node ${node} cpus" | cut -d":" -f2))
-    CLIENT_PHYSICAL_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${numa_cores[@]:0:CLIENT_PHYSICAL_CORE_COUNT})
-    CLIENT_LOGICAL_CORES=(${CLIENT_LOGICAL_CORES[@]} ${numa_cores[@]:CLIENT_PHYSICAL_CORE_COUNT})
-done
-for node in $(seq "${SERVER_FIRST_SIBLING_NUMA}" $((SERVER_FIRST_SIBLING_NUMA+SERVER_LOGICAL_NUMA_PER_SOCKET-1)))
-do
-    numa_cores=($(echo "${SERVER_NUMA_TOPO}" | grep "node ${node} cpus" | cut -d":" -f2))
-    SERVER_PHYSICAL_CORES=(${SERVER_PHYSICAL_CORES[@]} ${numa_cores[@]:0:SERVER_PHYSICAL_CORE_COUNT})
-    SERVER_LOGICAL_CORES=(${SERVER_LOGICAL_CORES[@]} ${numa_cores[@]:SERVER_PHYSICAL_CORE_COUNT})
-done
-CLIENTS_AFFINITY_CORES=(${CLIENT_PHYSICAL_CORES[@]} ${CLIENT_LOGICAL_CORES[@]})
-SERVER_AFFINITY_CORES=(${SERVER_PHYSICAL_CORES[@]} ${SERVER_LOGICAL_CORES[@]})
-CLIENT_AFFINITY_IRQ_COUNT=$((CLIENT_CPUCOUNT<CLIENT_PRESET_MAX ? CLIENT_CPUCOUNT : CLIENT_PRESET_MAX))
-SERVER_AFFINITY_IRQ_COUNT=$((SERVER_CPUCOUNT<SERVER_PRESET_MAX ? SERVER_CPUCOUNT : SERVER_PRESET_MAX))
+if [ "${#SERVER_DEVICES[@]}" -ne "${#CLIENT_DEVICES[@]}" ]
+then
+        fatal "The number of server and client devices must be equal."
+fi
+NUM_DEVS=${#SERVER_DEVICES[@]}
 
-ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CLIENTS_AFFINITY_CORES[@]::CLIENT_AFFINITY_IRQ_COUNT}")" "${CLIENT_DEVICE}"
-ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${SERVER_AFFINITY_CORES[@]::SERVER_AFFINITY_IRQ_COUNT}")" "${SERVER_DEVICE}"
+#init the arrays SERVER_IPS,CLIENT_IPS,SERVER_NETDEVS,CLIENT_NETDEVS
+get_ips_and_ifs
+LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEVS[0]}/type")"
+[ $CHANGE_MTU = "CHANGE" ] && change_mtu
+min_l=$(get_min_channels)
+opt_proc=$((min_l<MAX_PROC ? min_l : MAX_PROC))
 
-# Toggle interfaces down/up so channels allocation will be according to actual IRQ affinity
-ssh "${SERVER_TRUSTED}" "sudo ip l set ${SERVER_NETDEV} down; sudo ip l set ${SERVER_NETDEV} up; sudo ip a add ${SERVER_IP[0]}/24 broadcast + dev ${SERVER_NETDEV}"
+#try collect 2 more cores than needed incase we need to ditch core 0 (this is why we need opt_proc+2)
+read -ra CORES_ARRAY <<< $(get_cores_for_devices $1 $2 $3 $4 $((opt_proc+2)))
+#NUM_CORES_PER_DEVICE will be the actual cores that need to be used
+NUM_CORES_PER_DEVICE=$(( ${#CORES_ARRAY[@]}/(${#CLIENT_DEVICES[@]}*2) ))
+log "INFO:number of cores per device to be used is $NUM_CORES_PER_DEVICE, if duplex then half of them will act as servers and half as clients"
+
+echo ${CORES_ARRAY[@]}
+
+if [ "$DUPLEX" = true ]
+then
+    log "INFO: running Full duplex"
+    NUM_INST=$((NUM_CORES_PER_DEVICE/2))
+else
+    log "INFO: running half duplex"
+    NUM_INST=${NUM_CORES_PER_DEVICE}
+fi
+
+BASE_TCP_POTR=10000
+
+FORCE_EXIT=false
+#Set number of cores to use and apply tuning according to #core and list of cores
+#Expected global params :
+#CLIENT_TRUSTED,CLIENT_DEVICES,SERVER_TRUSTED,SERVER_DEVICES,NUM_INST,opt_proc,CORES_ARRAY
+tune_tcp
+#Relaxed ordring was disabled - user need to restart the driver so that the change take affect.
+[ $FORCE_EXIT = true ] && echo -e "${RED}Please restart driver after disabling relaxed ordering (RO), and run the script again ${NC}" && exit 1
+
+TIME_STAMP=$(date +%s)
+#Run server side
+run_iperf_servers
 sleep 2
-ssh "${CLIENT_TRUSTED}" "sudo ip l set ${CLIENT_NETDEV} down; sudo ip l set ${CLIENT_NETDEV} up; sudo ip a add ${CLIENT_IP[0]}/24 broadcast + dev ${CLIENT_NETDEV}"
-sleep 2
+#Run client side
+run_iperf_clients
 
-run_iperf3
-
-# uncomment if needed: Run iperf2 for reference after settings
-# run_iperf2
-
-#set +x
+#Collect the output
+collect_BW
