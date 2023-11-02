@@ -222,7 +222,7 @@ prep_for_tune_and_iperf_test() {
     TCP_PORT_ID="$(echo "${CLIENT_DEVICE}" | cut -d '_' -f 2)"
     TCP_PORT_ADDITION=$((TCP_PORT_ID * 100))
     BASE_TCP_PORT=$((5200 + TCP_PORT_ADDITION))
-    NUMACTL_HW=("numactl" "--hardware" "|" "grep" "-v" "node")
+    NUMACTL_HW=("numactl" "-H" "|" "grep" "-v" "node")
     NUM_SOCKETS_CMD=("lscpu" "|" "grep" "'Socket'" "|" "cut" "-d':'" "-f2")
     NUM_NUMAS_CMD=("lscpu" "|" "grep" "'NUMA node(s)'" "|" "cut" "-d':'" "-f2")
 
