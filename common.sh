@@ -202,6 +202,14 @@ prep_for_tune_and_iperf_test() {
     ssh "${CLIENT_TRUSTED}" pkill iperf3
     ssh "${SERVER_TRUSTED}" pkill iperf3
 
+    find_empty_numas=( "numactl" "-H" "|" "awk"
+                       "'/node [0-9]+ size:/{print \$4}'" "|"
+                       "grep" "-q" "'^0$'" )
+    ! ssh "${CLIENT_TRUSTED}" "${find_empty_numas[*]}" ||
+        fatal "${CLIENT_TRUSTED} has empty NUMAs - please verify your BIOS/SMT settings."
+    ! ssh "${SERVER_TRUSTED}" "${find_empty_numas[*]}" ||
+        fatal "${SERVER_TRUSTED} has empty NUMAs - please verify your BIOS/SMT settings."
+
     CLIENT_NUMA_NODE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/numa_node")"
     ((CLIENT_NUMA_NODE != -1)) || CLIENT_NUMA_NODE="0"
     SERVER_NUMA_NODE="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/infiniband/${SERVER_DEVICE}/device/numa_node")"
