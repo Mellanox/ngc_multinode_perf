@@ -111,7 +111,7 @@ run_perftest(){
         #Make sure that there is a valid BW
         check_if_number "$BW2" || PASS=false
         log "Device ${CLIENT_DEVICES[1]} reached ${BW2} Gb/s (max possible: $((port_rate2 * 2)) Gb/s)"
-        if [[ $BW2 -lt ${BW_PASS_RATE2} ]] && [[ $PKT_SIZE -eq $REPORT_ON_SIZE ]]
+        if [[ $BW2 -lt ${BW_PASS_RATE2} ]]
         then
             log "Device ${CLIENT_DEVICES[1]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
             PASS=false
