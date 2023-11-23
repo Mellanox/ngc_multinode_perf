@@ -130,26 +130,34 @@ get_ips_and_ifs() {
     local sdev cdev i
     SERVER_NETDEVS=()
     SERVER_IPS=()
+    SERVER_IPS_MASK=()
+    i=0
     for sdev in "${SERVER_DEVICES[@]}"
     do
         SERVER_NETDEVS+=("$(ssh "${SERVER_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${sdev}")") 
         [ -n "${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}" ] ||
             fatal "Can't find a server net device associated with the IB device '${sdev}'."
-        SERVER_IPS+=("$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
+        ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]} | grep 'net'")
+        SERVER_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
+        SERVER_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${SERVER_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${SERVER_IPS[${#SERVER_IPS[@]}-1]}" ] &&
             fatal "Can't find a server IP associated with the net device '${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}'." ||
             log "INFO: Found $(awk -F',' '{print NF}' <<<"${SERVER_IPS[${#SERVER_IPS[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}'."
         [ -n "${SERVER_NETDEVS}" ] ||
         fatal "Can't find server net device. Did you mean to specify IB device as '${SERVER_DEVICE}'?"
+        i=$((i+1))
     done
     CLIENT_NETDEVS=()
     CLIENT_IPS=()
+    CLIENT_IPS_MASK=()
     for cdev in "${CLIENT_DEVICES[@]}"
     do
         CLIENT_NETDEVS+=("$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${cdev}")")
         [ -n "${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}" ] ||
             fatal "Can't find a client net device associated with the IB device '${cdev}'."
-        CLIENT_IPS+=("$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
+        ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]} | grep 'net'")
+        CLIENT_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
+        CLIENT_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${CLIENT_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}" ] &&
             fatal "Can't find a client IP associated with the net device '${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}'." ||
             log "INFO: Found $(awk -F',' '{print NF}' <<<"${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}'."
@@ -741,8 +749,8 @@ tune_tcp() {
         then
             enable_flow_stearing ${CLIENT_TRUSTED} $client_netdev $i
         fi
-        ssh "${SERVER_TRUSTED}" "sudo ip l set ${server_netdev} down; sudo ip l set ${server_netdev} up; sudo ip a add ${SERVER_IPS[i]}/24 broadcast + dev ${server_netdev}"
-        ssh "${CLIENT_TRUSTED}" "sudo ip l set ${client_netdev} down; sudo ip l set ${client_netdev} up; sudo ip a add ${CLIENT_IPS[i]}/24 broadcast + dev ${client_netdev}"
+        ssh "${SERVER_TRUSTED}" "sudo ip l set ${server_netdev} down; sudo ip l set ${server_netdev} up; sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}"
+        ssh "${CLIENT_TRUSTED}" "sudo ip l set ${client_netdev} down; sudo ip l set ${client_netdev} up; sudo ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}"
     done
 }
 
