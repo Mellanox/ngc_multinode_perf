@@ -883,7 +883,7 @@ collect_BW() {
                 failed_tcp_test=true
             fi
             #echo "Server side(act as client for full duplex ) ${SERVER_DEVICES[dev_idx]} report throughput of ${S_BW}Gb/s"
-            echo -e "${pref}Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} <->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s <-> ${S_BW}Gb/s${suffix}"
+            echo -e "${pref}Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} <->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s <-> ${S_BW}Gb/s${suffix} / ${port_rate}Gb/s${suffix}"
             dupBW=$(echo "$S_BW + $BW" | bc)
             echo "Full duplex: ${dupBW}Gb/s"
             totalBW=$(echo "$totalBW + $dupBW" | bc)
