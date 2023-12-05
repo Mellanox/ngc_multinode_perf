@@ -24,6 +24,10 @@ do
             QPS="${1#*=}"
             shift
             ;;
+        --conn=*)
+            IFS=',' read -ra CONN_TYPES <<< "${1#*=}"
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -35,6 +39,15 @@ do
 done
 set -- "${POSITIONAL_ARGS[@]}"
 
+TESTS=("ib_write_bw" "ib_read_bw" "ib_send_bw" "ib_write_lat" "ib_read_lat" "ib_send_lat")
+
+get_perftest_connect_options() {
+    local test
+
+    test="${1}"
+    "${test}" --help | awk -F'[<>]' '/--connection=/{gsub(/\//," ");gsub(/SRD/,"");print $2}'
+}
+
 show_help()
 {
     cat <<EOF >&2
@@ -44,17 +57,20 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>]
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
 	--qp=<num of QPs>: Use the sepecified QPs' number (default: ${default_qps}, max: ${max_qps})
-	--all_connection_types: check all the supported connection types for each test
+	--all_connection_types: check all the supported connection types for each test, or:
+	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
 Example:(Run on 2 ports)
 $0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
+Example:(Pick 3 connection types, single port)
+$0 client mlx5_0 server mlx5_3 --conn=UC,UD,DC
 
 EOF
 }
@@ -78,12 +94,23 @@ then
     exit 1
 fi
 
-get_perftest_connect_options() {
-    local test
+# validate CONN_TYPES input before start of run
+for CONN_TYPE in "${CONN_TYPES[@]}"; do
+    exists_for_at_least_one_test=false
+    for TEST in "${TESTS[@]}"; do
+        available_conn_types="$(get_perftest_connect_options "$TEST")"
+        # Check if the current connection type exists for the current test
+        if [[ "$available_conn_types" == *"$CONN_TYPE"* ]]; then
+            exists_for_at_least_one_test=true
+            break
+        fi
+    done
+    if [ "${exists_for_at_least_one_test}" != "true" ]; then
+        fatal "invalid connection type: ${CONN_TYPE}"
+        exit 1
+    fi
+done
 
-    test="${1}"
-    "${test}" --help | awk -F'[<>]' '/--connection=/{gsub(/\//," ");gsub(/SRD/,"");print $2}'
-}
 
 run_perftest(){
     local -a conn_type_cmd extra_server_args extra_client_args
@@ -239,7 +266,7 @@ fi
 
 #---------------------Run Benchmark--------------------
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
-for TEST in ib_write_bw ib_read_bw ib_send_bw ib_write_lat ib_read_lat ib_send_lat; do
+for TEST in "${TESTS[@]}"; do
     logstring[0]="${TEST}"
     if [ $RUN_WITH_CUDA ] && grep -q '^ib_send_bw\|ib_write_lat$' <<<"${TEST}"
     then
@@ -250,7 +277,17 @@ for TEST in ib_write_bw ib_read_bw ib_send_bw ib_write_lat ib_read_lat ib_send_l
     then
         read -ra connection_types <<<"$(get_perftest_connect_options "${TEST}")"
     else
-        connection_types=( "default" )
+        connection_types=("${CONN_TYPES[@]}")
+        if [ "${#connection_types[@]}" -eq 0 ]; then
+            connection_types=("default")
+        else
+	    # Filter unrelevant connection types to the current test
+            available_conn_types=($(get_perftest_connect_options "${TEST}"))
+            connection_types=($(comm -12 <(printf '%s\n' "${available_conn_types[@]}" | LC_ALL=C sort) <(printf '%s\n' "${connection_types[@]}" | LC_ALL=C sort)))
+            if [ "${#connection_types[@]}" -eq 0 ]; then
+                continue
+            fi
+        fi
     fi
     for CONN_TYPE in "${connection_types[@]}"
     do
