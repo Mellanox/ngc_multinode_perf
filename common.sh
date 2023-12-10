@@ -911,28 +911,26 @@ collect_BW() {
         prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
         dev_base_port=$((BASE_TCP_POTR + 10000*dev_idx))
         port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}")
-        port_rate="$(awk "BEGIN {printf \"%.0f\n\", 0.9*${port_rate}}")"
+        passing_port_rate="$(awk "BEGIN {printf \"%.0f\n\", 0.9*${port_rate}}")"
         BW=$(get_bandwidth_from_combined_files ${CLIENT_TRUSTED} "CLIENT" "/tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}")
         S_BW=0
         pref=${GREEN}
-        suffix=${NC}
+        suffix="${NC} - linerate ${port_rate}Gb/s"
         if [ "$DUPLEX"  = false ]
         then
-            if [ $(echo "$BW < ${port_rate}" | bc) -ne 0 ]
+            if [ $(echo "$BW < ${passing_port_rate}" | bc) -ne 0 ]
             then
                 pref=${RED}
-                suffix="${NC} - expected ${port_rate}Gb/s"
-                failed_tcp_test=true
-
+		failed_tcp_test=true
             fi
             echo -e "${pref}Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} ->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s${suffix}"
         else
             dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
             S_BW=$(get_bandwidth_from_combined_files ${SERVER_TRUSTED} "SERVER" "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}")
-            if [ $(echo "$BW < ${port_rate}" | bc) -ne 0 ] || [ $(echo "$S_BW < ${port_rate}" | bc) -ne 0 ]
+            if [ $(echo "$BW < ${passing_port_rate}" | bc) -ne 0 ] || [ $(echo "$S_BW < ${passing_port_rate}" | bc) -ne 0 ]
             then
                 pref=${RED}
-                suffix="${NC} - expected ${port_rate}Gb/s"
+                suffix="${NC} - linerate ${port_rate}Gb/s"
                 failed_tcp_test=true
             fi
             #echo "Server side(act as client for full duplex ) ${SERVER_DEVICES[dev_idx]} report throughput of ${S_BW}Gb/s"
