@@ -93,8 +93,6 @@ run_perftest(){
         *_lat)
             extra_server_args=("--output=latency")
             bw_test=false
-            # For latency with GPU (with cuda) ib_write_lat is not supported
-            [ $(expr "${TEST}" : ".*write.*") -ne 0 ] || unset server_cuda{,2} client_cuda{,2}
             ;;
         *_bw)
             extra_client_args=("--report_gbit" "-b" "-q" "${QPS}")
@@ -243,9 +241,9 @@ fi
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
 for TEST in ib_write_bw ib_read_bw ib_send_bw ib_write_lat ib_read_lat ib_send_lat; do
     logstring[0]="${TEST}"
-    if [ $RUN_WITH_CUDA ] && [ "$TEST" = "ib_send_bw" ]
+    if [ $RUN_WITH_CUDA ] && grep -q '^ib_send_bw\|ib_write_lat$' <<<"${TEST}"
     then
-        log "Skip ib_send_bw when running with CUDA"
+        log "Skip ${TEST} when running with CUDA"
         continue
     fi
     if [ "${ALL_CONN_TYPES}" = true ]
