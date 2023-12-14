@@ -241,7 +241,7 @@ fi
 
 #---------------------Run Benchmark--------------------
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
-for TEST in ib_write_bw ib_read_bw ib_send_bw ib_write_lat ib_read_lat; do
+for TEST in ib_write_bw ib_read_bw ib_send_bw ib_write_lat ib_read_lat ib_send_lat; do
     logstring[0]="${TEST}"
     if [ $RUN_WITH_CUDA ] && [ "$TEST" = "ib_send_bw" ]
     then
