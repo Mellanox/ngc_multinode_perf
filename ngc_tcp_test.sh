@@ -12,6 +12,7 @@ if (($# < 4)); then
     echo "		   disable_ro - add this flag as workaround for Sapphire Rapid CPU that missing/disabled the following tuning in BIOS (Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled)"
     echo "		                You will need to restart the driver and re run again"
     echo "		   allow_core_zero - allow binding process on core 0, default:false"
+    echo "		   neighbor_levels - in case there is no enough cores on NIC numa, specify the number of closet neighbor numa to collect cores form it, default:2"
     exit 1
 fi
 scriptdir="$(dirname "$0")"
@@ -44,6 +45,10 @@ do
             ALLAOW_CORE_ZERO=true
             shift
             ;;
+        --neighbor_levels=*)
+            NEIGHBOR_LEVELS="${1#*=}"
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -67,8 +72,9 @@ IS_SERVER_SPR=false
 [ -n "${CHANGE_MTU}" ] || CHANGE_MTU="CHANGE"
 [ -n "${DISABLE_RO}" ] || DISABLE_RO=false
 [ -n "${TEST_DURATION}" ] || TEST_DURATION="120"
-[ -n "${MAX_PROC}" ] || MAX_PROC="30"
+[ -n "${MAX_PROC}" ] || MAX_PROC="64"
 [ -n "${ALLAOW_CORE_ZERO}" ] || ALLAOW_CORE_ZERO=false
+[ -n "${NEIGHBOR_LEVELS}" ] || NEIGHBOR_LEVELS=1
 
 
 CLIENT_CORE_USAGES_FILE="/tmp/ngc_client_core_usages.log"
