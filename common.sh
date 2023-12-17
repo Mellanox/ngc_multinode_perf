@@ -460,20 +460,50 @@ get_numa_nodes_array() {
      echo "${DEVCIES_NUMA[*]}"
 }
 
+#Will return cores form the closest numa node
+#param: NUMA_NODE index,  string of NUMASTL -H output , NEIGHBOR_LEVELS how many neighbors
+get_more_cores_for_closest_numa(){
+    local numa_index=$1
+    local STR_NUMACTL="$2"
+    local NEIGHBOR_LEVELS=$3
+
+    distances=( $(echo "$STR_NUMACTL" | sed -n "s/ ${numa_index}://p") )
+    sorted_indxes_and_dist=($(for i in "${!distances[@]}"; do echo "$i ${distances[$i]}"; done | sort -n -k2))
+    echo "${sorted[@]}"
+    #get only indexes without the first one - since distance to self will be the lower values.
+    sorted_indexes=($(echo "${sorted_indxes_and_dist[@]}" | awk '{for(i=3; i<=NF; i+=2) print $i}'))
+
+    local level=1
+    res=()
+    for nighbor_numa in "${sorted_indexes[@]}"
+    do
+        if [ $level -gt $NEIGHBOR_LEVELS ]
+        then
+            break
+        fi
+        res+=( $(echo "$STR_NUMACTL"| grep -i "node $nighbor_numa cpus" | awk '{print substr($0,14)}'))
+        level=$((level+1))
+    done
+
+    echo ${res[@]}
+}
+
 #global params :
 #NUMA_NODES
 get_available_cores_per_device(){
-
     local SERVER_TRUSTED=$1
+    local REQ_CORE_NUM=$2
     local i=0
     declare -a INDEX_OF_DEVICE_IN_NUMA
     declare -a NUM_ARRAY
+    STR_NUMASTL=$(ssh ${SERVER_TRUSTED} numactl -H)
     #Set max to number of cores in first numa
-    local MAX_POSSIBLE_CORES_PER_DEVICE=$(ssh ${SERVER_TRUSTED} numactl -H | grep -i "node ${NUMA_NODES[0]} cpus" | awk '{print substr($0,14)}' | wc -w )
-    if [ $MAX_POSSIBLE_CORES_PER_DEVICE -gt $2 ]
+    local MAX_POSSIBLE_CORES_PER_DEVICE=$( echo "${STR_NUMASTL}" | grep -i "node ${NUMA_NODES[0]} cpus" | awk '{print substr($0,14)}' | wc -w )
+    if [ $MAX_POSSIBLE_CORES_PER_DEVICE -gt $REQ_CORE_NUM ]
     then
-        MAX_POSSIBLE_CORES_PER_DEVICE=$2
+        MAX_POSSIBLE_CORES_PER_DEVICE=$REQ_CORE_NUM
     fi
+    MAX_POSSIBLE_CORES_PER_DEVICE=85
     for n in "${NUMA_NODES[@]}"
     do
         CORES_IN_NUMA_REF="CORES_IN_NUMA_${n}"
@@ -481,6 +511,10 @@ get_available_cores_per_device(){
         then
             #Save core list on NUMA n
             eval "declare -a CORES_IN_NUMA_${n}=($(ssh ${SERVER_TRUSTED} numactl -H | grep -i "node $n cpus" | awk '{print substr($0,14)}')) ";
+            if [ "$(eval "echo \${#${CORES_IN_NUMA_REF}[@]}")" -lt $REQ_CORE_NUM ]
+            then
+                eval "${CORES_IN_NUMA_REF}+=( $(get_more_cores_for_closest_numa $n "$STR_NUMASTL" $NEIGHBOR_LEVELS) )"
+            fi
             NUM_ARRAY["num_devices_${n}"]=1
         else
             curr_value="${NUM_ARRAY["num_devices_${n}"]}"
@@ -508,6 +542,7 @@ get_available_cores_per_device(){
             index=$((j + (INDEX_OF_DEVICE_IN_NUMA[i]-1)*MAX_POSSIBLE_CORES_PER_DEVICE))
 
             eval "res=\${CORES_IN_NUMA_${n}[\$index]}"
+            eval "all=\${CORES_IN_NUMA_${n}[@]}"
             echo -n "$res "
         done
         i=$((i+1))
@@ -540,10 +575,11 @@ check_if_has_core_zero(){
 #avoid using core 0 if needed.
 #when running full duplex make sure w
 normlize_core_lists() {
-
     local server_core_per_device=$(( ${#SERVER_CORES[@]}/NUM_DEVS ))
     local client_core_per_device=$(( ${#CLIENT_CORES[@]}/NUM_DEVS ))
     local max_usable_cores=$((server_core_per_device<client_core_per_device ? server_core_per_device : client_core_per_device))
+    #TODO check if need to limit number of cores to number of channles
+    #max_usable_cores=$((64<max_usable_cores ? 64 : max_usable_cores))
     s_offset=0
     e_offset=0
     HAS_CORE_ZERO=$(check_if_has_core_zero)
@@ -557,13 +593,22 @@ normlize_core_lists() {
         e_offset=1
     fi
     #Reduce #core to up to opt_proc
-    finial_core_count=$((max_usable_cores<opt_proc ? max_usable_cores : opt_proc))
+    finial_core_count=$((max_usable_cores* NUM_DEVS)) #$((max_usable_cores<opt_proc ? max_usable_cores : opt_proc))
     #make sure even number of cores is used for full duplex
     if [ $((finial_core_count%2)) -eq 1 ] && [ "$DUPLEX" = "true" ]
     then
         finial_core_count=$((finial_core_count-1))
     fi
+
     local i=0
+    if [ $NUM_DEVS = 1 ]
+    then
+        SERVER_CORES=(${SERVER_CORES[@]:0:$finial_core_count})
+        CLIENT_CORES=(${CLIENT_CORES[@]:0:$finial_core_count})
+        echo "${SERVER_CORES[@]} ${CLIENT_CORES[@]}"
+        return
+    fi
+
     for((; i<NUM_DEVS; i++))
     do
         local diff=$((server_core_per_device-finial_core_count))
@@ -580,12 +625,12 @@ normlize_core_lists() {
         SERVER_CORES=(${shead_array[@]} ${SERVER_CORES[@]:$pos})
         CLIENT_CORES=(${chead_array[@]} ${CLIENT_CORES[@]:$pos})
     done
+    echo "${SERVER_CORES[@]} ${CLIENT_CORES[@]}"
 }
 
 get_cores_for_devices(){
     local SERVER_TRUSTED=$1
     local CLIENT_TRUSTED=$3
-
 
     if [ ${CLIENT_TRUSTED} = ${SERVER_TRUSTED} ]
     then
@@ -595,11 +640,10 @@ get_cores_for_devices(){
     else
         NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$2"))
         read -ra SERVER_CORES <<< $(get_available_cores_per_device $SERVER_TRUSTED $5)
-        server_core_per_device=$(( ${#SERVER_CORES[@]}/NUM_DEVS ))
+        server_core_per_device=$((${#SERVER_CORES[@]}))
         NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$4"))
         read -ra CLIENT_CORES <<< $(get_available_cores_per_device $CLIENT_TRUSTED $server_core_per_device)
         normlize_core_lists
-        echo "${SERVER_CORES[@]} ${CLIENT_CORES[@]}"
     fi
 }
 
@@ -654,21 +698,36 @@ enable_aRFS() {
 }
 
 enable_flow_stearing(){
-    local SERVER=$1
+    local CLIENT_NETDEV=$1
     local SERVER_NETDEV=$2
     local index=$3
     local j=0
-    for ((; j<30; j++))
+    for ((; j<100; j++))
     do
-        ssh "${SERVER}" "sudo ethtool -U $SERVER_NETDEV delete $j &> /dev/null"
+        ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV delete $j &> /dev/null"
+        ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV delete $j &> /dev/null"
     done
     log "INFO: done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
     sleep 1
     local i=0
-    for ((; i < NUM_INST; i++))
+    for ((; i <= $NUM_INST; i++))
     do
-        ssh "${SERVER}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
-        ssh "${SERVER}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST+1)) queue $((i+NUM_INST+1))" &> /dev/null
+        ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
+        echo "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
+        if [ "$DUPLEX"  = true ]
+        then
+            ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))" &> /dev/null
+            ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 dst-port $((11000*(index+1) + i)) loc $i queue $i" &> /dev/null
+            ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((11000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))" &> /dev/null
+
+            echo "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
+            echo "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
+            echo "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
+        else
+            ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
+            echo "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $i queue $i"
+        fi
+
     done
 }
 
@@ -686,20 +745,20 @@ tune_tcp() {
     # Stop IRQ balancer service
     ssh "${CLIENT_TRUSTED}" sudo systemctl stop irqbalance
     ssh "${SERVER_TRUSTED}" sudo systemctl stop irqbalance
-
     #Check if special tuning for Sapphire Rapid system is needed
     IS_SERVER_SPR=$(is_SPR "${SERVER_TRUSTED}")
     IS_CLIENT_SPR=$(is_SPR "${CLIENT_TRUSTED}")
-
+    CHANNELS=$(($NUM_CORES_PER_DEVICE > 63 ? 63 : $NUM_CORES_PER_DEVICE))
     num_devs=${#SERVER_DEVICES[@]}
+
     local i=0
     for ((; i<num_devs; i++))
     do
         server_netdev="${SERVER_NETDEVS[i]}"
         client_netdev="${CLIENT_NETDEVS[i]}"
         #Set number of channels to number of cores per process
-        ssh "${SERVER_TRUSTED}" sudo ethtool -L "${server_netdev}" combined "${NUM_CORES_PER_DEVICE}"
-        ssh "${CLIENT_TRUSTED}" sudo ethtool -L "${client_netdev}" combined "${NUM_CORES_PER_DEVICE}"
+        ssh "${SERVER_TRUSTED}" sudo ethtool -L "${server_netdev}" combined "$CHANNELS"
+        ssh "${CLIENT_TRUSTED}" sudo ethtool -L "${client_netdev}" combined "$CHANNELS"
         if $IS_SERVER_SPR
         then
             #Enhancement:to have multiple profile for SPR , when it is single 400Gb/s port you can set  rx-usecs 128 and rx-frames 512
@@ -712,43 +771,30 @@ tune_tcp() {
             ssh "${CLIENT_TRUSTED}" "sudo ethtool -C ${client_netdev} adaptive-rx off ; sudo ethtool -C $client_netdev rx-usecs 128 ; sudo ethtool -C $client_netdev rx-frames 512 ; sudo ethtool -G $client_netdev rx 4096"
             [ $DISABLE_RO = true ] && disable_pci_RO "${CLIENT_TRUSTED}" "${client_netdev}"
         fi
-        core_offset=0
 
+        NUM_CORES_AFFINITY=$NUM_INST
         if [ "$DUPLEX"  = true ]
         then
-            core_offset=$NUM_INST
+            NUM_CORES_AFFINITY=$((NUM_INST*2))
         fi
-        #add dummy core at the start since the first one is used to sync, this will allow us to have one
-        s_add_dumy_core=1
-        c_add_dumy_core=1
-        s_core=$((i*NUM_CORES_PER_DEVICE + core_offset - s_add_dumy_core))
+
+        s_core=$((i*NUM_CORES_PER_DEVICE  ))
         #indexes of cores for client side starts from the second half of the device.
-        c_core=$((i*NUM_CORES_PER_DEVICE +num_devs*NUM_CORES_PER_DEVICE + core_offset - c_add_dumy_core))
-        #fix indexes if need
-        if (( s_core < 0))
-        then
-            s_core=0
-            s_add_dumy_core=0
-        fi
-        if (( c_core < 0))
-        then
-            c_core=0
-            c_add_dumy_core=0
-        fi
-        ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_INST+s_add_dumy_core))}")" "${SERVER_DEVICES[i]}" &> /dev/null
-        ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_INST+c_add_dumy_core))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
-        log "INFO:Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_INST+s_add_dumy_core))}")"
-        log "INFO:Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_INST+c_add_dumy_core))}")"
+        c_core=$((i*NUM_CORES_PER_DEVICE +num_devs*NUM_CORES_PER_DEVICE ))
+
+        #add dummy core at the start since the first one is used to sync, this will allow us to have one
+
+        ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "${CORES_ARRAY[s_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
+        ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "${CORES_ARRAY[c_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
+        log "INFO:Device ${SERVER_DEVICES[i]} in server side core affinity is ${CORES_ARRAY[s_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
+        log "INFO:Device ${CLIENT_DEVICES[i]} in client side core affinity is ${CORES_ARRAY[c_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
         #Enable aRFS
         if [ ${LINK_TYPE} -eq 1 ]; then
             enable_aRFS "${SERVER_TRUSTED}" "${server_netdev}"
             enable_aRFS "${CLIENT_TRUSTED}" "${client_netdev}"
         fi
-        enable_flow_stearing ${SERVER_TRUSTED} $server_netdev $i
-        if [ "$DUPLEX"  = true ]
-        then
-            enable_flow_stearing ${CLIENT_TRUSTED} $client_netdev $i
-        fi
+        enable_flow_stearing $client_netdev $server_netdev $i
+
         ssh "${SERVER_TRUSTED}" "sudo ip l set ${server_netdev} down; sudo ip l set ${server_netdev} up; sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}"
         ssh "${CLIENT_TRUSTED}" "sudo ip l set ${client_netdev} down; sudo ip l set ${client_netdev} up; sudo ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}"
     done
@@ -776,7 +822,7 @@ run_iperf_servers() {
                 sleep 0.1
                 index=$(( i+OFFSET_C ))
                 core="${CORES_ARRAY[index]}"
-                prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
+                prt=$((BASE_TCP_POTR + 1000 + 11000*dev_idx + i ))
                 ssh "${CLIENT_TRUSTED}" "taskset -c $core iperf3 -s -p $prt --one-off &> /dev/null " &
                 log "INFO: run iperf3 server on ${CLIENT_TRUSTED} core index= $index - taskset -c $core iperf3 -s -p $prt --one-off &> /dev/null "
             done
@@ -810,7 +856,6 @@ run_iperf_clients() {
             echo "taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i}   -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & " >> ${iperf_clients_to_run_client_side}
             log "INFO: run taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i}   -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log & "
         done
-
         #If full duplex then create iperf3 clients on server side
         if [ "$DUPLEX"  = true ]
         then
@@ -820,7 +865,7 @@ run_iperf_clients() {
                 sleep 0.1
                 index=$(( i+OFFSET_C ))
                 core="${CORES_ARRAY[index]}"
-                dev_base_port=$((BASE_TCP_POTR + 10000*dev_idx))
+                dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
                 prt=$((dev_base_port + i ))
                 ip_i=${CLIENT_IPS[dev_idx]}
                 echo "taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i} -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & " >> ${iperf_clients_to_run_server_side}
@@ -828,7 +873,6 @@ run_iperf_clients() {
             done
         fi
     done
-
     #Copy the file to the servers to ensure running all iperf3 clients at the same time
     scp ${iperf_clients_to_run_client_side} ${CLIENT_TRUSTED}:${iperf_clients_to_run_client_side}
     if [ "$DUPLEX"  = "true" ]
@@ -883,6 +927,7 @@ collect_BW() {
             fi
             echo -e "${pref}Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} ->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s${suffix}"
         else
+            dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
             S_BW=$(get_bandwidth_from_combined_files ${SERVER_TRUSTED} "SERVER" "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}")
             if [ $(echo "$BW < ${port_rate}" | bc) -ne 0 ] || [ $(echo "$S_BW < ${port_rate}" | bc) -ne 0 ]
             then
