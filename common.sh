@@ -904,8 +904,8 @@ collect_BW() {
 
     if [ $failed_tcp_test = "true" ]
     then
-        [[ $IS_CLIENT_SPR ]] && log "WARN: Client side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
-        [[ $IS_SERVER_SPR ]] && log "WARN: Server side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
+        [[ "$IS_CLIENT_SPR" = "true" ]] && log "WARN: Client side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
+        [[ "$IS_SERVER_SPR" = "true" ]] && log "WARN: Server side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
         echo -e "${RED}Failed - servers failed ngc_tcp_test with the given HCAs${NC}"
         exit 1
     else
