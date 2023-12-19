@@ -703,13 +703,13 @@ tune_tcp() {
         if $IS_SERVER_SPR
         then
             #Enhancement:to have multiple profile for SPR , when it is single 400Gb/s port you can set  rx-usecs 128 and rx-frames 512
-            ssh "${SERVER_TRUSTED}" "ethtool -C ${server_netdev} adaptive-rx off ; ethtool -C $server_netdev rx-usecs 128 ; ethtool -C $server_netdev rx-frames 1024 ; ethtool -G $server_netdev rx 2048"
+            ssh "${SERVER_TRUSTED}" "sudo ethtool -C ${server_netdev} adaptive-rx off ; sudo ethtool -C $server_netdev rx-usecs 128 ; sudo ethtool -C $server_netdev rx-frames 1024 ; sudo ethtool -G $server_netdev rx 2048"
             [ $DISABLE_RO = true ] && disable_pci_RO "${SERVER_TRUSTED}" "${server_netdev}"
         fi
 
         if $IS_CLIENT_SPR
         then
-            ssh "${CLIENT_TRUSTED}" "ethtool -C ${client_netdev} adaptive-rx off ; ethtool -C $client_netdev rx-usecs 128 ; ethtool -C $client_netdev rx-frames 1024 ; ethtool -G $client_netdev rx 2048"
+            ssh "${CLIENT_TRUSTED}" "sudo ethtool -C ${client_netdev} adaptive-rx off ; sudo ethtool -C $client_netdev rx-usecs 128 ; sudo ethtool -C $client_netdev rx-frames 1024 ; sudo ethtool -G $client_netdev rx 2048"
             [ $DISABLE_RO = true ] && disable_pci_RO "${CLIENT_TRUSTED}" "${client_netdev}"
         fi
         core_offset=0
