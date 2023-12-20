@@ -285,7 +285,7 @@ fi
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
 for TEST in "${TESTS[@]}"; do
     logstring[0]="${TEST}"
-    if [ $RUN_WITH_CUDA ] && grep -q '^ib_send_bw\|ib_write_lat$' <<<"${TEST}"
+    if [ $RUN_WITH_CUDA ] && grep -q '^ib_send_bw\|ib_write_lat\|ib_send_lat$' <<<"${TEST}"
     then
         log "Skip ${TEST} when running with CUDA"
         continue
