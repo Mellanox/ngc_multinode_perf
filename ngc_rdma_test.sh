@@ -28,7 +28,11 @@ do
             IFS=',' read -ra CONN_TYPES <<< "${1#*=}"
             shift
             ;;
-        --*)
+	--tests=*)
+	    IFS=',' read -ra TESTS <<< "${1#*=}"
+            shift
+	    ;;
+	--*)
             fatal "Unknown option ${1}"
             ;;
         *)
@@ -39,13 +43,25 @@ do
 done
 set -- "${POSITIONAL_ARGS[@]}"
 
-TESTS=("ib_write_bw" "ib_read_bw" "ib_send_bw" "ib_write_lat" "ib_read_lat" "ib_send_lat")
+
+IMPLEMENTED_TESTS=("ib_write_bw" "ib_read_bw" "ib_send_bw" "ib_write_lat" "ib_read_lat" "ib_send_lat")
+# loop over TESTS and fatal if there is a test that is not implemented
+for test in "${TESTS[@]}"; do
+    if [[ ! " ${IMPLEMENTED_TESTS[@]} " =~ " ${test} " ]]; then
+        fatal "Test '${test}' is not implemented."
+    fi
+done
+
+# If TESTS is empty, set it to IMPLEMENTED_TESTS
+if [ ${#TESTS[@]} -eq 0 ]; then
+    TESTS=("${IMPLEMENTED_TESTS[@]}")
+fi
 
 get_perftest_connect_options() {
     local test
 
     test="${1}"
-    "${test}" --help | awk -F'[<>]' '/--connection=/{gsub(/\//," ");gsub(/SRD/,"");print $2}'
+    ssh "${SERVER_TRUSTED}" "${test} --help" | awk -F'[<>]' '/--connection=/{gsub(/\//," ");gsub(/SRD/,"");print $2}'
 }
 
 show_help()
@@ -57,13 +73,14 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>]
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
 	--qp=<num of QPs>: Use the sepecified QPs' number (default: ${default_qps}, max: ${max_qps})
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
+	--tests=<list of ib perftests>: Use this flag to provide a comma-separated list of ib perftests to run.
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
