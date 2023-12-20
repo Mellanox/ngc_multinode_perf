@@ -82,3 +82,21 @@ and remove IPsec configuration.
 ```
 
 * The number of tunnels should not exceed the number of IPs configured on the NICs.
+
+## Tuning instructions and HW/FW requirements
+
+| Item                                    | Description                    |
+|-----------------------------------------|--------------------------------|
+| ConnectX-6 Firmware version             | 20.29.2002                     |
+| ConnectX-6 Dx Firmware version          | 22.29.2002                     |
+| BlueField-2 Firmware version            | 24.29.2002                     |
+| MLNX_OFED Version                       | MLNX_OFED_LINUX-5.2-2.2.0.0    |
+| Eth Switch ports                        | Set MTU to 9216<br>Enable PFC and ECN using the single "Do ROCE" command |
+| IB Switch OpenSM                        | Change IPoIB MTU to 4K:<br>[standalone: master] → en<br>[standalone: master] # conf t<br>[standalone: master] (config) # ib partition Default mtu 4K force |
+| **AMD CPUs: EPYC 7002 and 7003 series** |                                |
+| BIOS Settings                           | CPU Power Management → Maximum Performance<br>Memory Frequency → Maximum Performance<br>Alg. Performance Boost Disable (ApbDis) → Enabled<br>ApbDis Fixed Socket P-State → P0<br>NUMA Nodes Per Socket → 2<br>L3 cache as NUMA Domain → Enabled<br>x2APIC Mode → Enabled<br>PCIe ACS → Disabled<br>Preferred IO → Disabled<br>Enhanced Preferred IO → Enabled |
+| Boot grub settings                      | `iommu=pt numa_balancing=disable processor.max_cstate=0` |
+| **Intel CPUs: Xeon Gold and Platinum**  |                                |
+| BIOS Settings                           | Out of the box                 |
+| Boot grub settings                      | `intel_idle.max_cstate=0 processor.max_cstate=0 intel_pstate=disable` |
+| NIC PCIe settings                       | For each NIC PCIe function:<br>Change PCI MaxReadReq to 4096B<br>Run `setpci -s $PCI_FUNCTION 68.w`, it will return 4 digits ABCD<br>→ Run `setpci -s $PCI_FUNCTION 68.w=5BCD` |
