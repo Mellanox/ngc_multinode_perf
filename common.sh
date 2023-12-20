@@ -659,7 +659,7 @@ get_min_channels(){
         fi
     done
 
-    for dev in "${SERVER_NETDEVS[@]}"
+    for dev in "${CLIENT_NETDEVS[@]}"
     do
         tmp=$(ssh "${CLIENT_TRUSTED}" ethtool -l "${dev}" | awk '/Combined/{print $2}' | head -1)
         if [ $tmp -lt $min ]
