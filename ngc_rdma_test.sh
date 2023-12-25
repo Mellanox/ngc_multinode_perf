@@ -150,21 +150,21 @@ run_perftest(){
     #Run on all size, report pass/fail if 8M size reached line rate
     [ "${CONN_TYPE}" = "default" ] || conn_type_cmd=( "-c" "${CONN_TYPE}" )
     PASS=true
-    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} -a -F ${conn_type_cmd[*]} ${extra_server_args[*]} ${server_cuda}" >> /dev/null &
+    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} --perform_warm_up -D 30 -F ${conn_type_cmd[*]} ${extra_server_args[*]} ${server_cuda}" >> /dev/null &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} -a -F ${conn_type_cmd[*]} ${extra_server_args[*]} -p 10001 ${server_cuda2}" >> /dev/null &
+        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} --perform_warm_up -D 30 -F ${conn_type_cmd[*]} ${extra_server_args[*]} -p 10001 ${server_cuda2}" >> /dev/null &
     fi
 
     #make sure server sides is open.
     sleep 2
 
     #Run client
-    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} -a ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} ${extra_client_args[*]} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
+    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --perform_warm_up -D 30 ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} ${extra_client_args[*]} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} -a ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} ${extra_client_args[*]} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --perform_warm_up -D 30 ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} ${extra_client_args[*]} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
         if [ "${bw_test}" = "true" ]
         then
