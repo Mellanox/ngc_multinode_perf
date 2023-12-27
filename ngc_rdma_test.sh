@@ -4,6 +4,7 @@ set -eE
 
 default_qps=4
 max_qps=64
+ms_list=("65536")
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
@@ -32,6 +33,10 @@ do
 	    IFS=',' read -ra TESTS <<< "${1#*=}"
             shift
 	    ;;
+        --message-size-list=*)
+            IFS=',' read -ra ms_list <<< "${1#*=}"
+            shift
+            ;;
 	--*)
             fatal "Unknown option ${1}"
             ;;
@@ -73,7 +78,7 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>] [--message-size-list=<list of message sizes>]
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
@@ -81,6 +86,7 @@ Options:
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
 	--tests=<list of ib perftests>: Use this flag to provide a comma-separated list of ib perftests to run.
+	--message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run (default: 65536)
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
@@ -132,6 +138,7 @@ done
 run_perftest(){
     local -a conn_type_cmd extra_server_args extra_client_args
     local bg_pid bg2_pid
+    local message_size="$1"
 
     case "${TEST}" in
         *_lat)
@@ -150,21 +157,21 @@ run_perftest(){
     #Run on all size, report pass/fail if 8M size reached line rate
     [ "${CONN_TYPE}" = "default" ] || conn_type_cmd=( "-c" "${CONN_TYPE}" )
     PASS=true
-    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} --perform_warm_up -D 30 -F ${conn_type_cmd[*]} ${extra_server_args[*]} ${server_cuda}" >> /dev/null &
+    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} -D 30 -s ${message_size} -F ${conn_type_cmd[*]} ${extra_server_args[*]} ${server_cuda}" >> /dev/null &
 
     #open server on port 2 if exists
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} --perform_warm_up -D 30 -F ${conn_type_cmd[*]} ${extra_server_args[*]} -p 10001 ${server_cuda2}" >> /dev/null &
+        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} -D 30 -s ${message_size} -F ${conn_type_cmd[*]} ${extra_server_args[*]} -p 10001 ${server_cuda2}" >> /dev/null &
     fi
 
     #make sure server sides is open.
     sleep 2
 
     #Run client
-    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} --perform_warm_up -D 30 ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} ${extra_client_args[*]} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
+    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} -D 30 ${SERVER_TRUSTED} -s ${message_size} -F ${conn_type_cmd[*]} ${extra_client_args[*]} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
     #if this is doul-port open another server.
     if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} --perform_warm_up -D 30 ${SERVER_TRUSTED} -F ${conn_type_cmd[*]} ${extra_client_args[*]} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
+        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} -D 30 ${SERVER_TRUSTED} -s ${message_size} -F ${conn_type_cmd[*]} ${extra_client_args[*]} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
         wait "${bg2_pid}"
         if [ "${bw_test}" = "true" ]
         then
@@ -308,14 +315,16 @@ for TEST in "${TESTS[@]}"; do
     fi
     for CONN_TYPE in "${connection_types[@]}"
     do
-        run_perftest
-
-        if [ "${bw_test}" = "true" ]
-        then
-            [ "${CONN_TYPE}" = "default" ] &&
-                logstring[1]="-" || logstring[1]="(connection type: ${CONN_TYPE})"
-            [ "${PASS}" = true ] && logstring[2]="Passed" || logstring[2]="Failed"
-            log "${logstring[*]}"
-        fi
+        for message_size in "${ms_list[@]}"
+        do
+            run_perftest "$message_size"
+            if [ "${bw_test}" = "true" ]
+            then
+                [ "${CONN_TYPE}" = "default" ] &&
+                    logstring[1]="-" || logstring[1]="(connection type: ${CONN_TYPE})"
+                [ "${PASS}" = true ] && logstring[2]="Passed" || logstring[2]="Failed"
+                log "${logstring[*]}"
+            fi
+        done
     done
 done
