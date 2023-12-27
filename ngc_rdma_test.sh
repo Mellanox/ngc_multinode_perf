@@ -29,15 +29,15 @@ do
             IFS=',' read -ra CONN_TYPES <<< "${1#*=}"
             shift
             ;;
-	--tests=*)
-	    IFS=',' read -ra TESTS <<< "${1#*=}"
+        --tests=*)
+            IFS=',' read -ra TESTS <<< "${1#*=}"
             shift
-	    ;;
+            ;;
         --message-size-list=*)
             IFS=',' read -ra ms_list <<< "${1#*=}"
             shift
             ;;
-	--*)
+        --*)
             fatal "Unknown option ${1}"
             ;;
         *)
@@ -154,7 +154,6 @@ run_perftest(){
             fatal "${TEST} - test not supported."
             ;;
     esac
-    #Run on all size, report pass/fail if 8M size reached line rate
     [ "${CONN_TYPE}" = "default" ] || conn_type_cmd=( "-c" "${CONN_TYPE}" )
     PASS=true
     ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} -D 30 -s ${message_size} -F ${conn_type_cmd[*]} ${extra_server_args[*]} ${server_cuda}" >> /dev/null &
@@ -305,7 +304,7 @@ for TEST in "${TESTS[@]}"; do
         if [ "${#connection_types[@]}" -eq 0 ]; then
             connection_types=("default")
         else
-	    # Filter unrelevant connection types to the current test
+            # Filter unrelevant connection types to the current test
             available_conn_types=($(get_perftest_connect_options "${TEST}"))
             connection_types=($(comm -12 <(printf '%s\n' "${available_conn_types[@]}" | LC_ALL=C sort) <(printf '%s\n' "${connection_types[@]}" | LC_ALL=C sort)))
             if [ "${#connection_types[@]}" -eq 0 ]; then
