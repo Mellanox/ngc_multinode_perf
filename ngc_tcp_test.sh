@@ -72,7 +72,7 @@ IS_SERVER_SPR=false
 [ -n "${CHANGE_MTU}" ] || CHANGE_MTU="CHANGE"
 [ -n "${DISABLE_RO}" ] || DISABLE_RO=false
 [ -n "${TEST_DURATION}" ] || TEST_DURATION="120"
-[ -n "${MAX_PROC}" ] || MAX_PROC="64"
+[ -n "${MAX_PROC}" ] || MAX_PROC="32"
 [ -n "${ALLAOW_CORE_ZERO}" ] || ALLAOW_CORE_ZERO=false
 [ -n "${NEIGHBOR_LEVELS}" ] || NEIGHBOR_LEVELS=1
 
