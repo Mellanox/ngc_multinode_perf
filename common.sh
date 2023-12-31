@@ -753,22 +753,23 @@ tune_tcp() {
             [ $DISABLE_RO = true ] && disable_pci_RO "${CLIENT_TRUSTED}" "${client_netdev}"
         fi
 
-        NUM_CORES_AFFINITY=$NUM_INST
+        NUM_CORES_AFFINITY=$((NUM_INST/2))
         if [ "$DUPLEX"  = true ]
         then
-            NUM_CORES_AFFINITY=$((NUM_INST*2))
+            NUM_CORES_AFFINITY=$NUM_INST
         fi
+        offset_c=$NUM_CORES_AFFINIT
 
-        s_core=$((i*NUM_CORES_PER_DEVICE  ))
+        s_core=$((i*NUM_CORES_PER_DEVICE + offset_c ))
         #indexes of cores for client side starts from the second half of the device.
-        c_core=$((i*NUM_CORES_PER_DEVICE +num_devs*NUM_CORES_PER_DEVICE ))
+        c_core=$((i*NUM_CORES_PER_DEVICE +num_devs*NUM_CORES_PER_DEVICE + offset_c ))
 
         #add dummy core at the start since the first one is used to sync, this will allow us to have one
 
-        ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "${CORES_ARRAY[s_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
-        ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "${CORES_ARRAY[c_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
-        log "INFO:Device ${SERVER_DEVICES[i]} in server side core affinity is ${CORES_ARRAY[s_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
-        log "INFO:Device ${CLIENT_DEVICES[i]} in client side core affinity is ${CORES_ARRAY[c_core]},$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
+        ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
+        ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
+        log "INFO:Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
+        log "INFO:Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
         #Enable aRFS
         if [ ${LINK_TYPE} -eq 1 ]; then
             enable_aRFS "${SERVER_TRUSTED}" "${server_netdev}"
