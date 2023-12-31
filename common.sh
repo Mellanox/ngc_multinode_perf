@@ -578,8 +578,8 @@ normlize_core_lists() {
     local server_core_per_device=$(( ${#SERVER_CORES[@]}/NUM_DEVS ))
     local client_core_per_device=$(( ${#CLIENT_CORES[@]}/NUM_DEVS ))
     local max_usable_cores=$((server_core_per_device<client_core_per_device ? server_core_per_device : client_core_per_device))
-    #TODO check if need to limit number of cores to number of channles
-    #max_usable_cores=$((64<max_usable_cores ? 64 : max_usable_cores))
+    #TODO check if need to limit number of cores to number of channels
+    max_usable_cores=$((84<max_usable_cores ? 84 : max_usable_cores))
     s_offset=0
     e_offset=0
     HAS_CORE_ZERO=$(check_if_has_core_zero)
@@ -593,39 +593,20 @@ normlize_core_lists() {
         e_offset=1
     fi
     #Reduce #core to up to opt_proc
-    finial_core_count=$((max_usable_cores* NUM_DEVS)) #$((max_usable_cores<opt_proc ? max_usable_cores : opt_proc))
+    finial_core_count=$((max_usable_cores<opt_proc ? max_usable_cores : opt_proc))
     #make sure even number of cores is used for full duplex
     if [ $((finial_core_count%2)) -eq 1 ] && [ "$DUPLEX" = "true" ]
     then
         finial_core_count=$((finial_core_count-1))
     fi
-
-    local i=0
-    if [ $NUM_DEVS = 1 ]
-    then
-        SERVER_CORES=(${SERVER_CORES[@]:0:$finial_core_count})
-        CLIENT_CORES=(${CLIENT_CORES[@]:0:$finial_core_count})
-        echo "${SERVER_CORES[@]} ${CLIENT_CORES[@]}"
-        return
-    fi
-
-    for((; i<NUM_DEVS; i++))
+    up_to=$((finial_core_count - e_offset))
+    for((i=1; i<=NUM_DEVS; i++))
     do
-        local diff=$((server_core_per_device-finial_core_count))
-        local pos=$((finial_core_count*i + s_offset+ e_offset))
-        local end_pos=$((finial_core_count*i + finial_core_count))
-        head_array=""
-        if (( i > 0 ))
-        then
-            shead_array=(${SERVER_CORES[@]:0:$((i*finial_core_count))})
-            chead_array=(${CLIENT_CORES[@]:0:$((i*finial_core_count))})
-
-        fi
-
-        SERVER_CORES=(${shead_array[@]} ${SERVER_CORES[@]:$pos})
-        CLIENT_CORES=(${chead_array[@]} ${CLIENT_CORES[@]:$pos})
+        start_pos=$((finial_core_count*(i-1) + s_offset))
+        shead_array=(${shead_array[@]} ${SERVER_CORES[@]:$start_pos:up_to})
+        chead_array=(${chead_array[@]} ${CLIENT_CORES[@]:$start_pos:up_to})
     done
-    echo "${SERVER_CORES[@]} ${CLIENT_CORES[@]}"
+    echo "${shead_array[@]} ${chead_array[@]}"
 }
 
 get_cores_for_devices(){
