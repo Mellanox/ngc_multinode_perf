@@ -691,7 +691,7 @@ enable_flow_stearing(){
     log "INFO: done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
     sleep 1
     local i=0
-    for ((; i <= $NUM_INST; i++))
+    for ((; i < $NUM_INST; i++))
     do
         ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
         echo "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
