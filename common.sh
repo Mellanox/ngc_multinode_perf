@@ -683,6 +683,7 @@ enable_flow_stearing(){
     local SERVER_NETDEV=$2
     local index=$3
     local i
+    local -a cmd_arr
 
     ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done"
     ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done"
@@ -690,20 +691,24 @@ enable_flow_stearing(){
     sleep 1
     for ((i=0; i < $NUM_INST; i++))
     do
-        ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
-        log "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
+        cmd_arr=("ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "dst-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
+        ssh "${SERVER_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
+        log "flow starting ${SERVER_TRUSTED}: ${cmd_arr[*]}"
         if [ "$DUPLEX"  = true ]
         then
-            ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))" &> /dev/null
-            ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 dst-port $((11000*(index+1) + i)) loc $i queue $i" &> /dev/null
-            ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((11000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))" &> /dev/null
-
-            log "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
-            log "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
-            log "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
+            cmd_arr=("ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
+            ssh "${SERVER_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
+            log "flow starting ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+            cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "dst-port" "$((11000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
+            ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
+            log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
+            cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((11000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
+            ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
+            log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
         else
-            ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
-            log "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $i queue $i"
+            cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
+            ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
+            log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
         fi
 
     done
@@ -781,6 +786,7 @@ tune_tcp() {
 
 run_iperf_servers() {
     local dev_idx=0
+    local -a cmd_arr
     for ((; dev_idx<NUM_DEVS; dev_idx++))
     do
         local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE ))
@@ -789,8 +795,9 @@ run_iperf_servers() {
             index=$((i+OFFSET_S))
             core="${CORES_ARRAY[index]}"
             prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
-            ssh "${SERVER_TRUSTED}" "taskset -c $core iperf3 -s -p $prt --one-off &> /dev/null " &
-            log "INFO: run iperf3 server on ${SERVER_TRUSTED} -taskset -c $core iperf3 -s -p $prt --one-off &> /dev/null "
+            cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
+            ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} &> /dev/null" &
+            log "INFO: run iperf3 server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
         done
         #IF full duplex then create iperf3 servers on client side
         if [ "$DUPLEX"  = "true" ]
@@ -802,8 +809,9 @@ run_iperf_servers() {
                 index=$(( i+OFFSET_C ))
                 core="${CORES_ARRAY[index]}"
                 prt=$((BASE_TCP_POTR + 1000 + 11000*dev_idx + i ))
-                ssh "${CLIENT_TRUSTED}" "taskset -c $core iperf3 -s -p $prt --one-off &> /dev/null " &
-                log "INFO: run iperf3 server on ${CLIENT_TRUSTED} core index= $index - taskset -c $core iperf3 -s -p $prt --one-off &> /dev/null "
+                cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
+                ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]} &> /dev/null " &
+                log "INFO: run iperf3 server on ${CLIENT_TRUSTED} core index=${index}: ${cmd_arr[*]}"
             done
         fi
     done
