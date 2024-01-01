@@ -861,10 +861,10 @@ run_iperf_clients() {
         fi
     done
     #Copy the file to the servers to ensure running all iperf3 clients at the same time
-    scp ${iperf_clients_to_run_client_side} ${CLIENT_TRUSTED}:${iperf_clients_to_run_client_side}
+    scp -q ${iperf_clients_to_run_client_side} ${CLIENT_TRUSTED}:${iperf_clients_to_run_client_side}
     if [ "$DUPLEX"  = "true" ]
     then
-        scp ${iperf_clients_to_run_server_side} ${SERVER_TRUSTED}:${iperf_clients_to_run_server_side}
+        scp -q ${iperf_clients_to_run_server_side} ${SERVER_TRUSTED}:${iperf_clients_to_run_server_side}
         ssh ${SERVER_TRUSTED} "sleep 0.01 ; bash ${iperf_clients_to_run_server_side}" &> /dev/null &
     fi
     #Run all iperf clients
