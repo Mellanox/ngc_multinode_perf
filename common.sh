@@ -863,10 +863,17 @@ run_iperf_clients() {
         ssh ${SERVER_TRUSTED} "sleep 0.01 ; bash ${iperf_clients_to_run_server_side}" &> /dev/null &
     fi
     #Run all iperf clients
+    ssh ${CLIENT_TRUSTED} "bash ${iperf_clients_to_run_client_side}" &> /dev/null &
     log "INFO:iperf3 clietns start to run , wait for ${TEST_DURATION}sec for the test to finish"
-    ssh ${CLIENT_TRUSTED} "bash ${iperf_clients_to_run_client_side}" &> /dev/null
-    log "INFO:Run ended"
+}
 
+collect_stats(){
+    DURATION=$((TEST_DURATION-3))
+    num_cores=$(( ${#CORES_ARRAY[@]}/2 ))
+    client_cores_list="$(tr " " "," <<< "${CORES_ARRAY[@]:$num_cores:$num_cores}")"
+    server_cores_list="$(tr " " "," <<< "${CORES_ARRAY[@]:0:$num_cores}")"
+    ssh ${CLIENT_TRUSTED} "sar -u -P $client_cores_list,all $DURATION 1 | grep \"Average\"  > /tmp/ngc_tcp_core_usages_${TIME_STAMP}.txt" &
+    ssh ${SERVER_TRUSTED} "sar -u -P $server_cores_list,all $DURATION 1 | grep \"Average\"  > /tmp/ngc_tcp_core_usages_${TIME_STAMP}.txt" &
 }
 
 #param : string of files prefix to sum and return BW.
@@ -937,4 +944,13 @@ collect_BW() {
         echo -e "${GREEN}Passed - servers passed ngc_tcp_test with the given HCAs${NC}"
         exit 0
     fi
+}
+print_stats(){
+    server=$1
+    file="/tmp/ngc_tcp_core_usages_${TIME_STAMP}.txt"
+    log "Server:$server"
+    ssh "${server}" "awk '{print \$2 \"\t\" \$5}' $file"
+    usages=( $(ssh "${server}" "awk 'NR>1 {print \$5}' $file") )
+    total_active_avarage=`get_average ${usages[@]}`
+    paste <(echo "${server}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
 }

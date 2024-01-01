@@ -133,5 +133,15 @@ sleep 2
 #Run client side
 run_iperf_clients
 
+#Post traffic -collect stats
+collect_stats
+
+#wait for traffic to finish
+wait
+sleep 1
+#Print statistics
+print_stats $SERVER_TRUSTED
+print_stats $CLIENT_TRUSTED
+
 #Collect the output
 collect_BW
