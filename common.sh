@@ -691,19 +691,19 @@ enable_flow_stearing(){
     for ((i=0; i < $NUM_INST; i++))
     do
         ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
-        echo "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
+        log "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
         if [ "$DUPLEX"  = true ]
         then
             ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))" &> /dev/null
             ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 dst-port $((11000*(index+1) + i)) loc $i queue $i" &> /dev/null
             ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((11000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))" &> /dev/null
 
-            echo "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
-            echo "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
-            echo "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
+            log "flow starting ${SERVER_TRUSTED}: ethtool -U $SERVER_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
+            log "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 dst-port $((10000*(index+1) + i)) loc $i queue $i"
+            log "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $((i+NUM_INST)) queue $((i+NUM_INST))"
         else
             ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $i queue $i" &> /dev/null
-            echo "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $i queue $i"
+            log "flow starting ${CLIENT_TRUSTED}: ethtool -U $CLIENT_NETDEV flow-type tcp4 src-port $((10000*(index+1) + i)) loc $i queue $i"
         fi
 
     done

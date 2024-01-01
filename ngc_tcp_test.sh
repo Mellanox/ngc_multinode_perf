@@ -105,7 +105,7 @@ read -ra CORES_ARRAY <<< $(get_cores_for_devices $1 $2 $3 $4 $((opt_proc+2)))
 NUM_CORES_PER_DEVICE=$(( ${#CORES_ARRAY[@]}/(${#CLIENT_DEVICES[@]}*2) ))
 log "INFO:number of cores per device to be used is $NUM_CORES_PER_DEVICE, if duplex then half of them will act as servers and half as clients"
 
-echo ${CORES_ARRAY[@]}
+log "${CORES_ARRAY[*]}"
 
 if [ "$DUPLEX" = true ]
 then
