@@ -682,12 +682,9 @@ enable_flow_stearing(){
     local CLIENT_NETDEV=$1
     local SERVER_NETDEV=$2
     local index=$3
-    local j=0
-    for ((; j<100; j++))
-    do
-        ssh "${CLIENT_TRUSTED}" "sudo ethtool -U $CLIENT_NETDEV delete $j &> /dev/null"
-        ssh "${SERVER_TRUSTED}" "sudo ethtool -U $SERVER_NETDEV delete $j &> /dev/null"
-    done
+
+    ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done"
+    ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done"
     log "INFO: done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
     sleep 1
     local i=0
