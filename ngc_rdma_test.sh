@@ -4,7 +4,8 @@ set -eE
 
 default_qps=4
 max_qps=64
-ms_list=("65536")
+bw_ms_list=("65536")
+lat_ms_list=("2")
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
@@ -33,8 +34,12 @@ do
             IFS=',' read -ra TESTS <<< "${1#*=}"
             shift
             ;;
-        --message-size-list=*)
-            IFS=',' read -ra ms_list <<< "${1#*=}"
+        --bw_message-size-list=*)
+            IFS=',' read -ra bw_ms_list <<< "${1#*=}"
+            shift
+            ;;
+        --lat_message-size-list=*)
+            IFS=',' read -ra lat_ms_list <<< "${1#*=}"
             shift
             ;;
         --*)
@@ -47,7 +52,6 @@ do
     esac
 done
 set -- "${POSITIONAL_ARGS[@]}"
-
 
 IMPLEMENTED_TESTS=("ib_write_bw" "ib_read_bw" "ib_send_bw" "ib_write_lat" "ib_read_lat" "ib_send_lat")
 # loop over TESTS and fatal if there is a test that is not implemented
@@ -86,7 +90,8 @@ Options:
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
 	--tests=<list of ib perftests>: Use this flag to provide a comma-separated list of ib perftests to run.
-	--message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run (default: 65536)
+	--bw_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run bw tests (default: 65536)
+	--lat_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
@@ -314,6 +319,11 @@ for TEST in "${TESTS[@]}"; do
     fi
     for CONN_TYPE in "${connection_types[@]}"
     do
+        if [[ "${TEST}" == *_lat* ]]; then
+            ms_list=("${lat_ms_list[@]}")
+        else
+            ms_list=("${bw_ms_list[@]}")
+        fi
         for message_size in "${ms_list[@]}"
         do
             run_perftest "$message_size"
