@@ -108,6 +108,8 @@ CLIENT_DEVICES=(${2//,/ })
 SERVER_TRUSTED="${3}"
 SERVER_DEVICES=(${4//,/ })
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
+(( 1 <= NUM_CONNECTIONS )) && (( NUM_CONNECTIONS <= 2 )) ||
+    fatal "Number of connections ${NUM_CONNECTIONS} is too high."
 (( default_qps /= NUM_CONNECTIONS )) ||
     fatal "You need more QPs for the specified number of connections"
 [ -n "${QPS}" ] || QPS="${default_qps}"
