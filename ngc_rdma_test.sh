@@ -108,6 +108,8 @@ CLIENT_DEVICES=(${2//,/ })
 SERVER_TRUSTED="${3}"
 SERVER_DEVICES=(${4//,/ })
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
+(( default_qps /= NUM_CONNECTIONS )) ||
+    fatal "You need more QPs for the specified number of connections"
 [ -n "${QPS}" ] || QPS="${default_qps}"
 (( QPS <= max_qps )) || fatal "Max allowed QPs are ${max_qps}."
 #Defaults are not using cuda, set params as empty string
