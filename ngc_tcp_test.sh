@@ -88,7 +88,7 @@ fi
 
 if [ "${#SERVER_DEVICES[@]}" -ne "${#CLIENT_DEVICES[@]}" ]
 then
-        fatal "The number of server and client devices must be equal."
+    fatal "The number of server and client devices must be equal."
 fi
 NUM_DEVS=${#SERVER_DEVICES[@]}
 
