@@ -71,6 +71,7 @@ run_iperf2() {
 }
 
 get_average() {
+    (( $# != 0 )) || fatal "Average can not be called on an empty array."
     awk "BEGIN {printf \"%.2f\n\", ($(IFS=+; printf '%s' "${*}"))/$#}"
 }
 
