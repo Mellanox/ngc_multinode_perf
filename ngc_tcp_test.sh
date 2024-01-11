@@ -2,6 +2,8 @@
 # NGC Certification TCP test v2.3
 # Owner: amira@nvidia.com
 #
+set -eE
+trap 'printf "Error in function %s, on line %d.\n" "${FUNCNAME[1]}" "${BASH_LINENO[0]}"' ERR
 
 if (($# < 4)); then
     echo "usage: $0 <client trusted ip> <client ib device>[,client ib device2] <server trusted ip> <server ib device>[,server ib device2] [--duplex=<'HALF','FULL'>] [--change_mtu=<'CHANGE','DONT_CHANGE'>] [--duration=<sec>] [--max_proc=<number>]"
