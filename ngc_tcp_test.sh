@@ -92,6 +92,15 @@ then
 fi
 NUM_DEVS=${#SERVER_DEVICES[@]}
 
+case "${DUPLEX}" in
+    "true")
+        (( MAX_PROC > (NUM_DEVS * 2 + 1) )) || fatal "max_proc is set too low."
+        ;;
+    "false")
+        (( MAX_PROC > (NUM_DEVS + 1) )) || fatal "max_proc is set too low."
+        ;;
+esac
+
 #init the arrays SERVER_IPS,CLIENT_IPS,SERVER_NETDEVS,CLIENT_NETDEVS
 get_ips_and_ifs
 LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEVS[0]}/type")"
