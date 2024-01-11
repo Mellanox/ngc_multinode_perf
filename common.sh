@@ -686,8 +686,8 @@ enable_flow_stearing(){
     local i
     local -a cmd_arr
 
-    ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done"
-    ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done"
+    ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done" || :
+    ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done" || :
     log "INFO: done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
     sleep 1
     for ((i=0; i < $NUM_INST; i++))
@@ -780,8 +780,8 @@ tune_tcp() {
         fi
         enable_flow_stearing $client_netdev $server_netdev $i
 
-        ssh "${SERVER_TRUSTED}" "sudo ip l set ${server_netdev} down; sudo ip l set ${server_netdev} up; sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}"
-        ssh "${CLIENT_TRUSTED}" "sudo ip l set ${client_netdev} down; sudo ip l set ${client_netdev} up; sudo ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}"
+        ssh "${SERVER_TRUSTED}" "sudo ip l set ${server_netdev} down; sudo ip l set ${server_netdev} up; sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}" || :
+        ssh "${CLIENT_TRUSTED}" "sudo ip l set ${client_netdev} down; sudo ip l set ${client_netdev} up; sudo ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}" || :
     done
 }
 
