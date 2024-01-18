@@ -878,6 +878,112 @@ run_iperf_clients() {
     log "INFO:iperf3 clietns start to run , wait for ${TEST_DURATION}sec for the test to finish"
 }
 
+ports_device_identifier() {
+    # Input: Server name & ports list
+    # Output: Displays the PCI bus numbers of the ports.
+    local server_name=$1
+    shift
+    local ports_list=$@
+    local -a devices_pci_list=()
+    for i in ${ports_list[@]}; do
+        cmd="readlink /sys/class/infiniband/${i}/device | awk -F'[/.]' '{print \$(NF-1)}'"
+        device_pci=$(ssh "${server_name}" "$cmd")
+        devices_pci_list+=("$device_pci")
+    done
+    echo "${devices_pci_list[@]}"
+}
+
+default_qps_optimization() {
+    # By default, set 4 QPs per device.
+    local server_name=$1
+    shift
+    local ports_list=$@
+    local counter=0
+    local -a default_qps_list=()
+    devices_pci_list=$(ports_device_identifier "$server_name" "${ports_list[@]}")
+    for i in ${devices_pci_list[@]}; do
+        counter=$(grep -o $i <<< ${devices_pci_list[*]} | wc -l)
+        if [ "$counter" -eq 1 ]; then
+            default_qps_list+=(4)
+        else
+            default_qps_list+=(2)
+        fi
+    done
+    echo "${default_qps_list[@]}"
+}
+
+run_perftest_servers() {
+    local dev_idx=0
+    local -a cmd_arr
+    local extra_server_args_str
+    for ((; dev_idx<NUM_DEVS; dev_idx++))
+    do
+        local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE ))
+        sleep 0.1
+        index=$((OFFSET_S))
+        core="${CORES_ARRAY[index]}"
+        prt=$((BASE_RDMA_PORT + dev_idx ))
+        if [ $RUN_WITH_CUDA ]
+            then
+            CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[dev_idx]}" | cut -d , -f 1)
+            server_cuda="--use_cuda=${CUDA_INDEX}"
+            fi
+        extra_server_args_str="${extra_server_args[*]//%%QPS%%/${server_QPS[dev_idx]}}"
+        cmd_arr=("taskset" "-c" "${core}" "${TEST}" "-d" "${SERVER_DEVICES[dev_idx]}" "-s" "${message_size}" "-D 30" "-p $prt" "-F" "${conn_type_cmd[*]}" "${extra_server_args_str}" "${server_cuda}")
+        ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} >> /dev/null &" &
+        log "INFO: run ${TEST} server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+    done
+}
+
+run_perftest_clients() {
+    local bg_pid
+    local -a cmd_arr
+    local extra_client_args_str
+    local dev_idx=0
+    for ((; dev_idx<NUM_DEVS; dev_idx++))
+    do
+        local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE + NUM_DEVS*NUM_CORES_PER_DEVICE + DUPLEX_OFFSET))
+        bg_pid="bg_pid_$dev_idx"
+        sleep 0.1
+        index=$((OFFSET_S))
+        core="${CORES_ARRAY[index]}"
+        dev_base_port=$((BASE_RDMA_PORT + dev_idx))
+        prt=$((dev_base_port))
+        if [ $RUN_WITH_CUDA ]
+            then
+            CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}" | cut -d , -f 1)
+            client_cuda="--use_cuda=${CUDA_INDEX}"
+            fi
+        ip_i=${SERVER_IPS[dev_idx]}
+        extra_client_args_str="${extra_client_args[*]//%%QPS%%/${client_QPS[dev_idx]}}"
+        cmd_arr=("taskset -c $core ${TEST} -d ${CLIENT_DEVICES[dev_idx]} -D 30 ${SERVER_TRUSTED} -s ${message_size} -p $prt -F ${conn_type_cmd[*]} ${extra_client_args_str} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json &")
+        ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]}" & declare ${bg_pid}=$!
+        log "INFO: run ${TEST} client on ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
+    done
+    for ((dev_idx=$NUM_DEVS-1; dev_idx>=0; dev_idx--)); do
+        bg_pid="bg_pid_$dev_idx"
+        wait "${!bg_pid}"
+    done
+    if [ "${bw_test}" = "true" ]
+    then
+        for ((dev_idx=0; dev_idx<NUM_DEVS; dev_idx++))
+        do
+            port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}")
+            BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate}}")"
+            BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
+            check_if_number "$BW" || PASS=false
+            log "Device ${CLIENT_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * 2)) Gb/s)"
+            if [[ $BW -lt ${BW_PASS_RATE} ]]
+            then
+                log "Device ${CLIENT_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
+                PASS=false
+            fi
+            ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
+        done
+    fi
+
+}
+
 collect_stats(){
     DURATION=$((TEST_DURATION-3))
     num_cores=$(( ${#CORES_ARRAY[@]}/2 ))

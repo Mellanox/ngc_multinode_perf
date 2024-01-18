@@ -1,4 +1,5 @@
 #!/bin/bash
+# Owner: rzilberzwaig@nvidia.com
 
 set -eE
 
@@ -6,6 +7,12 @@ default_qps=4
 max_qps=64
 bw_ms_list=("65536")
 lat_ms_list=("2")
+server_QPS=()
+client_QPS=()
+conn_type_cmd=()
+#Defaults are not using cuda, set params as empty string
+server_cuda=""
+client_cuda=""
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
@@ -23,7 +30,7 @@ do
             shift
             ;;
         --qp=*)
-            QPS="${1#*=}"
+            user_qps="${1#*=}"
             shift
             ;;
         --conn=*)
@@ -86,7 +93,7 @@ Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hos
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
-	--qp=<num of QPs>: Use the sepecified QPs' number (default: ${default_qps}, max: ${max_qps})
+	--qp=<num of QPs>: Use the sepecified QPs' number (default: 4 QPs per device, max: ${max_qps})
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
 	--tests=<list of ib perftests>: Use this flag to provide a comma-separated list of ib perftests to run.
@@ -103,28 +110,46 @@ $0 client mlx5_0 server mlx5_3 --conn=UC,UD,DC
 EOF
 }
 
-CLIENT_TRUSTED="${1}"
-CLIENT_DEVICES=(${2//,/ })
-SERVER_TRUSTED="${3}"
-SERVER_DEVICES=(${4//,/ })
-NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
-(( 1 <= NUM_CONNECTIONS )) && (( NUM_CONNECTIONS <= 2 )) ||
-    fatal "Number of connections ${NUM_CONNECTIONS} is too high."
-(( default_qps /= NUM_CONNECTIONS )) ||
-    fatal "You need more QPs for the specified number of connections"
-[ -n "${QPS}" ] || QPS="${default_qps}"
-(( QPS <= max_qps )) || fatal "Max allowed QPs are ${max_qps}."
-#Defaults are not using cuda, set params as empty string
-server_cuda=""
-client_cuda=""
-server_cuda2=""
-client_cuda2=""
-
 if (( $# != 4  ))
 then
     show_help
     exit 1
 fi
+
+CLIENT_TRUSTED="${1}"
+CLIENT_DEVICES=(${2//,/ })
+SERVER_TRUSTED="${3}"
+SERVER_DEVICES=(${4//,/ })
+NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
+if [ -n "${user_qps}" ]; then
+    (( user_qps <= max_qps )) || fatal "Max allowed QPs are ${max_qps}."
+    for ((i = 0; i < NUM_CONNECTIONS; i++)); do
+        server_QPS+=("${user_qps}")
+    done
+    client_QPS=("${server_QPS[@]}")
+else
+    read -ra client_QPS <<< $(default_qps_optimization "$CLIENT_TRUSTED" "${CLIENT_DEVICES[@]}")
+    read -ra server_QPS <<< $(default_qps_optimization "$SERVER_TRUSTED" "${SERVER_DEVICES[@]}")
+fi
+
+BASE_RDMA_PORT=10000
+
+if [ "${#SERVER_DEVICES[@]}" -ne "${#CLIENT_DEVICES[@]}" ]
+then
+    fatal "The number of server and client devices must be equal."
+fi
+NUM_DEVS=${#SERVER_DEVICES[@]}
+
+#init the arrays SERVER_IPS,CLIENT_IPS,SERVER_NETDEVS,CLIENT_NETDEVS
+get_ips_and_ifs
+
+MAX_PROC="32"
+min_l=$(get_min_channels)
+opt_proc=$((min_l<MAX_PROC ? min_l : MAX_PROC))
+
+read -ra CORES_ARRAY <<< $(get_cores_for_devices $1 $2 $3 $4 $((opt_proc+2)))
+NUM_CORES_PER_DEVICE=$(( ${#CORES_ARRAY[@]}/(${#CLIENT_DEVICES[@]}*2) ))
+NUM_INST=${NUM_CORES_PER_DEVICE}
 
 # validate CONN_TYPES input before start of run
 for CONN_TYPE in "${CONN_TYPES[@]}"; do
@@ -142,159 +167,6 @@ for CONN_TYPE in "${CONN_TYPES[@]}"; do
         exit 1
     fi
 done
-
-
-run_perftest(){
-    local -a conn_type_cmd extra_server_args extra_client_args
-    local bg_pid bg2_pid
-    local message_size="$1"
-
-    case "${TEST}" in
-        *_lat)
-            extra_server_args=("--output=latency")
-            bw_test=false
-            ;;
-        *_bw)
-            extra_client_args=("--report_gbit" "-b" "-q" "${QPS}")
-            extra_server_args=(${extra_client_args[@]} "--output=bandwidth")
-            bw_test=true
-            ;;
-        *)
-            fatal "${TEST} - test not supported."
-            ;;
-    esac
-    [ "${CONN_TYPE}" = "default" ] || conn_type_cmd=( "-c" "${CONN_TYPE}" )
-    PASS=true
-    ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER_CORE} ${TEST} -d ${SERVER_DEVICES[0]} -D 30 -s ${message_size} -F ${conn_type_cmd[*]} ${extra_server_args[*]} ${server_cuda}" >> /dev/null &
-
-    #open server on port 2 if exists
-    if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${SERVER_TRUSTED}" "sudo taskset -c ${SERVER2_CORE} ${TEST} -d ${SERVER_DEVICES[1]} -D 30 -s ${message_size} -F ${conn_type_cmd[*]} ${extra_server_args[*]} -p 10001 ${server_cuda2}" >> /dev/null &
-    fi
-
-    #make sure server sides is open.
-    sleep 2
-
-    #Run client
-    ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT_CORE} ${TEST} -d ${CLIENT_DEVICES[0]} -D 30 ${SERVER_TRUSTED} -s ${message_size} -F ${conn_type_cmd[*]} ${extra_client_args[*]} ${client_cuda} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[0]}.json" & bg_pid=$!
-    #if this is doul-port open another server.
-    if (( NUM_CONNECTIONS == 2 )); then
-        ssh "${CLIENT_TRUSTED}" "sudo taskset -c ${CLIENT2_CORE} ${TEST} -d ${CLIENT_DEVICES[1]} -D 30 ${SERVER_TRUSTED} -s ${message_size} -F ${conn_type_cmd[*]} ${extra_client_args[*]} -p 10001 ${client_cuda2} --out_json --out_json_file=/tmp/perftest_${CLIENT_DEVICES[1]}.json" & bg2_pid=$!
-        wait "${bg2_pid}"
-        if [ "${bw_test}" = "true" ]
-        then
-            BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[1]}.json | cut -d. -f1 | xargs")
-            #Make sure that there is a valid BW
-            check_if_number "$BW2" || PASS=false
-            log "Device ${CLIENT_DEVICES[1]} reached ${BW2} Gb/s (max possible: $((port_rate2 * 2)) Gb/s)"
-            if [[ $BW2 -lt ${BW_PASS_RATE2} ]]
-            then
-                log "Device ${CLIENT_DEVICES[1]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
-                PASS=false
-            fi
-        fi
-        ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[1]}.json"
-    fi
-
-    wait "${bg_pid}"
-    if [ "${bw_test}" = "true" ]
-    then
-        BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[0]}.json | cut -d. -f1 | xargs")
-        #Make sure that there is a valid BW
-        check_if_number "$BW" || PASS=false
-        log "Device ${CLIENT_DEVICES[0]} reached ${BW} Gb/s (max possible: $((port_rate * 2)) Gb/s)"
-        if [[ $BW -lt ${BW_PASS_RATE} ]]
-        then
-            log "Device ${CLIENT_DEVICES[0]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
-            PASS=false
-        fi
-    fi
-    ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[0]}.json"
-}
-
-#---------------------Cores Selection--------------------
-# get device local numa node
-if SERVER_NUMA_NODE=$(ssh "${SERVER_TRUSTED}" "cat /sys/class/infiniband/${SERVER_DEVICES[0]}/device/numa_node 2>/dev/null")
-then
-    if [[ $SERVER_NUMA_NODE == "-1" ]]; then
-        SERVER_NUMA_NODE="0"
-    fi
-else
-    SERVER_NUMA_NODE="0"
-fi
-
-if CLIENT_NUMA_NODE=$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICES[0]}/device/numa_node 2>/dev/null")
-then
-    if [[ $CLIENT_NUMA_NODE == "-1" ]]; then
-        CLIENT_NUMA_NODE="0"
-    fi
-else
-    CLIENT_NUMA_NODE="0"
-fi
-
-#get list of cores on relevent NUMA.
-read -ra SERVER_CORES_ARR <<< $(ssh "${SERVER_TRUSTED}" numactl -H | grep -i "node ${SERVER_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
-read -ra CLIENT_CORES_ARR <<< $(ssh "${CLIENT_TRUSTED}" numactl -H | grep -i "node ${CLIENT_NUMA_NODE} cpus" | awk '{print substr($0,14)}')
-
-
-#Avoid using core 0
-SERVER_CORES_START_INDEX=0
-(( ${SERVER_CORES_ARR[SERVER_CORES_START_INDEX]} != 0 )) || SERVER_CORES_START_INDEX=1
-CLIENT_CORES_START_INDEX=0
-(( ${CLIENT_CORES_ARR[CLIENT_CORES_START_INDEX]} != 0 )) || CLIENT_CORES_START_INDEX=1
-
-# Flag to indecate that there is not enough cores, if running on same setup that has 2 devices on same numa node.
-NOT_ENOUGH_CORES=1
-# If 2 NICs on the same setup and same NUMA then adjust client core to same core list and prevent using same core.
-if [ "${CLIENT_TRUSTED}" = "${SERVER_TRUSTED}" ] && [ "${SERVER_NUMA_NODE}" = "${CLIENT_NUMA_NODE}" ]; then
-    CLIENT_CORES_START_INDEX=$((SERVER_CORES_START_INDEX + NUM_CONNECTIONS))
-
-    if (( ${#SERVER_CORES_ARR[@]} < 5 )); then
-        log "Warning: there are not enough CPUs on NUMA to run isolated processes, this may impact performance."
-        NOT_ENOUGH_CORES=0
-    fi
-fi
-
-SERVER_CORE=${SERVER_CORES_ARR[SERVER_CORES_START_INDEX]}
-CLIENT_CORE=${CLIENT_CORES_ARR[CLIENT_CORES_START_INDEX]}
-if [ $RUN_WITH_CUDA ]
-then
-    CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
-    server_cuda="--use_cuda=${CUDA_INDEX}"
-    CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
-    client_cuda="--use_cuda=${CUDA_INDEX}"
-fi
-
-
-#if there is a second device , set cores for it. IMPORTANT:in case 2 devices on same numa and on same setup,
-#and numa is 0, then we assume there is at least 5 cores(0,1,2,3,4) on this numa to work with.
-if (( NUM_CONNECTIONS == 2 )); then
-    if (( NOT_ENOUGH_CORES == 0 )); then
-        SERVER2_CORE=${SERVER_CORES_ARR[SERVER_CORES_START_INDEX]}
-        CLIENT2_CORE=${CLIENT_CORES_ARR[CLIENT_CORES_START_INDEX]}
-    else
-        SERVER2_CORE=${SERVER_CORES_ARR[SERVER_CORES_START_INDEX+1]}
-        CLIENT2_CORE=${CLIENT_CORES_ARR[CLIENT_CORES_START_INDEX+1]}
-    fi
-    if [ $RUN_WITH_CUDA ]
-    then
-        CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[0]}" | cut -d , -f 1)
-        server_cuda2="--use_cuda=${CUDA_INDEX}"
-        CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[0]}" | cut -d , -f 1)
-        client_cuda2="--use_cuda=${CUDA_INDEX}"
-    fi
-fi
-
-#---------------------Expected speed--------------------
-# Set pass rate to 90% of the bidirectional link speed
-port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[0]}")
-BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate}}")"
-
-if (( NUM_CONNECTIONS == 2 )); then
-    port_rate2=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[1]}")
-    BW_PASS_RATE2="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate2}}")"
-fi
-
 
 #---------------------Run Benchmark--------------------
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
@@ -321,6 +193,22 @@ for TEST in "${TESTS[@]}"; do
             fi
         fi
     fi
+    case "${TEST}" in
+        *_lat)
+            extra_server_args=("--output=latency")
+            extra_client_args=("")
+            bw_test=false
+            ;;
+        *_bw)
+            extra_client_args=("--report_gbit" "-b" "-q" "%%QPS%%")
+            extra_server_args=("--report_gbit" "-b" "-q" "%%QPS%%" "--output=bandwidth")
+            bw_test=true
+            ;;
+        *)
+            fatal "${TEST} - test not supported."
+            ;;
+    esac
+     
     for CONN_TYPE in "${connection_types[@]}"
     do
         if [[ "${TEST}" == *_lat* ]]; then
@@ -328,9 +216,13 @@ for TEST in "${TESTS[@]}"; do
         else
             ms_list=("${bw_ms_list[@]}")
         fi
+        [ "${CONN_TYPE}" = "default" ] || conn_type_cmd=( "-c" "${CONN_TYPE}" )
+        PASS=true
         for message_size in "${ms_list[@]}"
         do
-            run_perftest "$message_size"
+            run_perftest_servers
+            sleep 2
+            run_perftest_clients
             if [ "${bw_test}" = "true" ]
             then
                 [ "${CONN_TYPE}" = "default" ] &&
