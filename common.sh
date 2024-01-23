@@ -600,7 +600,12 @@ normlize_core_lists() {
     then
         finial_core_count=$((finial_core_count-1))
     fi
-    up_to=$((finial_core_count - e_offset))
+    if [ $((max_usable_cores-NUM_DEVS)) -lt $finial_core_count ]
+    then
+        up_to=$((finial_core_count - e_offset - s_offset))
+    else
+        up_to=$finial_core_count
+    fi
     for((i=1; i<=NUM_DEVS; i++))
     do
         start_pos=$((finial_core_count*(i-1) + s_offset))
