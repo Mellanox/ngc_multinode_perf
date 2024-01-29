@@ -37,7 +37,7 @@ ngc_rdma_test() {
     local use_cuda
     local element
     if [[ "${1}" == "use_cuda" ]]; then
-        use_cuda="use_cuda"
+        use_cuda="--use_cuda"
         echo "NGC RDMA Test (Back2Back) in progress... (CUDA on)" | tee -a "${LOGFILE}"
     else
         use_cuda=""
@@ -106,7 +106,7 @@ ngc_rdma_test_external_loopback() {
     "5,11"
     )
     if [[ "${1}" == "use_cuda" ]]; then
-        use_cuda="use_cuda"
+        use_cuda="--use_cuda"
         echo "NGC RDMA Test (External Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
     else
         use_cuda=""
