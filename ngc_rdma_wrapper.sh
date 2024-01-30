@@ -160,7 +160,7 @@ results() {
         lowercase_line=$(echo "$line" | tr '[:upper:]' '[:lower:]')
         if [[ $lowercase_line == *"passed"* ]]; then
             echo -e "${GREEN}$line${NC}"
-        elif [[ $lowercase_line == *"ngc"* && $lowercase_line == *"failed"* ]]; then
+        elif [[ $lowercase_line == *"failed"* ]]; then
             echo -e "${RED}$line${NC}"
         elif [[ $lowercase_line == *"cuda on"* ]]; then
             echo ""
