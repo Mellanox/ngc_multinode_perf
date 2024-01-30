@@ -138,7 +138,7 @@ get_ips_and_ifs() {
         SERVER_NETDEVS+=("$(ssh "${SERVER_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${sdev}")")
         [ -n "${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}" ] ||
             fatal "Can't find a server net device associated with the IB device '${sdev}'."
-        ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]} | grep -w 'inet'")
+        ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]} | grep -w '^[[:space:]]\+inet'")
         SERVER_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
         SERVER_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${SERVER_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${SERVER_IPS[${#SERVER_IPS[@]}-1]}" ] &&
@@ -156,7 +156,7 @@ get_ips_and_ifs() {
         CLIENT_NETDEVS+=("$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${cdev}")")
         [ -n "${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}" ] ||
             fatal "Can't find a client net device associated with the IB device '${cdev}'."
-        ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]} | grep -w 'inet'")
+        ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]} | grep -w '^[[:space:]]\+inet'")
         CLIENT_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
         CLIENT_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${CLIENT_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}" ] &&
