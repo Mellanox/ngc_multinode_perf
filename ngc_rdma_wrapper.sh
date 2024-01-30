@@ -25,8 +25,7 @@ help() {
   ${WHITE}Usage (b2b connectivity):
   $0 Server Client
   For external loopback:
-  $0 Server
-
+  $0 Server${RESET}
 EOF
     exit 1
 }
@@ -119,7 +118,7 @@ ngc_rdma_test_external_loopback() {
         first="${pair%,*}"
         second="${pair#*,}"
         if [[ "$first" == "1" ]]; then
-            echo -e "${WHITE}Dual Port -  1st Port: mlx5_1, mlx5_2 | 2nd Port: mlx5_7, mlx5_8 PCI: ${PCI_DEVICE2}${NC}" &>> "${LOGFILE}"
+            echo -e "${WHITE}Dual Port -  1st Card: mlx5_1, mlx5_2 | 2nd Card: mlx5_7, mlx5_8${NC}" &>> "${LOGFILE}"
             "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_1","mlx5_2" "${SERVER_IP}" "mlx5_7","mlx5_8" ${use_cuda} &>> "${LOGFILE}"
         # Skip to avoid duplicates of the second port
         elif [[ "$first" == "2" ]]; then
