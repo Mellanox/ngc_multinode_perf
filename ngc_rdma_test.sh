@@ -140,8 +140,8 @@ then
 fi
 NUM_DEVS=${#SERVER_DEVICES[@]}
 
-#init the arrays SERVER_IPS,CLIENT_IPS,SERVER_NETDEVS,CLIENT_NETDEVS
-get_ips_and_ifs
+#init the arrays SERVER_NETDEVS,CLIENT_NETDEVS
+get_netdevs
 
 MAX_PROC="32"
 min_l=$(get_min_channels)
