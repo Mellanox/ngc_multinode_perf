@@ -192,7 +192,7 @@ get_netdev_from_ibdev() {
     netdev="$(ls -1 "/sys/class/infiniband/${ibdev}/device/net" | head -1)"
     if mlnx-sf -h &> /dev/null
     then
-        sfdev="$(mlnx-sf -ja show | jq -r --arg SF "${netdev}" '.[] | select(.netdev==$SF) | .sf_netdev')"
+        sfdev="$(mlnx-sf -ja show | jq -r --arg SF "${netdev}" '.[] | select(.netdev==$SF) | .sf_netdev' 2>/dev/null)"
     fi
     [ -z "${sfdev}" ] || netdev="${sfdev}"
     printf "%s" "${netdev}"
