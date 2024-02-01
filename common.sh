@@ -127,17 +127,32 @@ get_n_min_distances() {
     echo "${mins[@]}"
 }
 
-get_ips_and_ifs() {
+get_netdevs() {
     local sdev cdev i
     SERVER_NETDEVS=()
-    SERVER_IPS=()
-    SERVER_IPS_MASK=()
     i=0
     for sdev in "${SERVER_DEVICES[@]}"
     do
         SERVER_NETDEVS+=("$(ssh "${SERVER_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${sdev}")")
         [ -n "${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}" ] ||
             fatal "Can't find a server net device associated with the IB device '${sdev}'."
+    done
+    CLIENT_NETDEVS=()
+    for cdev in "${CLIENT_DEVICES[@]}"
+    do
+        CLIENT_NETDEVS+=("$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${cdev}")")
+        [ -n "${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}" ] ||
+            fatal "Can't find a client net device associated with the IB device '${cdev}'."
+    done
+}
+
+get_ips() {
+    local sdev cdev i
+    SERVER_IPS=()
+    SERVER_IPS_MASK=()
+    i=0
+    for sdev in "${SERVER_DEVICES[@]}"
+    do
         if ! ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]} | grep -w '^[[:space:]]\+inet'")
         then
             fatal "Interface ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]} on ${SERVER_TRUSTED} seems not to have an IPv4."
@@ -147,18 +162,12 @@ get_ips_and_ifs() {
         [ -z "${SERVER_IPS[${#SERVER_IPS[@]}-1]}" ] &&
             fatal "Can't find a server IP associated with the net device '${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}'." ||
             log "INFO: Found $(awk -F',' '{print NF}' <<<"${SERVER_IPS[${#SERVER_IPS[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}'."
-        [ -n "${SERVER_NETDEVS}" ] ||
-        fatal "Can't find server net device. Did you mean to specify IB device as '${SERVER_DEVICE}'?"
         i=$((i+1))
     done
-    CLIENT_NETDEVS=()
     CLIENT_IPS=()
     CLIENT_IPS_MASK=()
     for cdev in "${CLIENT_DEVICES[@]}"
     do
-        CLIENT_NETDEVS+=("$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${cdev}")")
-        [ -n "${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}" ] ||
-            fatal "Can't find a client net device associated with the IB device '${cdev}'."
         if ! ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]} | grep -w '^[[:space:]]\+inet'")
         then
             fatal "Interface ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]} on ${CLIENT_TRUSTED} seems not to have an IPv4."
@@ -168,9 +177,12 @@ get_ips_and_ifs() {
         [ -z "${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}" ] &&
             fatal "Can't find a client IP associated with the net device '${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}'." ||
             log "INFO: Found $(awk -F',' '{print NF}' <<<"${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}'."
-        [ -n "${CLIENT_NETDEVS}" ] ||
-        fatal "Can't find client net device. Did you mean to specify IB device as '${CLIENT_DEVICE}'?"
     done
+}
+
+get_ips_and_ifs() {
+    get_netdevs
+    get_ips
 }
 
 get_netdev_from_ibdev() {
