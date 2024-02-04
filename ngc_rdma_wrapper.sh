@@ -152,22 +152,28 @@ check_ssh() {
 }
 
 
-# Display results function(taken from the logfile)
+# Display results (taken from the logfile)
 results() {
-  # Read the file line by line
-    echo ""
-    echo -e "${WHITE}--- Results: ---${NC}"
-    echo -e "Without CUDA:"
-    local prev_line=""
+    local current_line=0
+    # Starting line (for CUDA)
+    if [[ "${1}" == "cuda" ]]; then
+        starting_line=$(grep -in "cuda on" "${LOGFILE}" | cut -d':' -f1)
+    else
+        starting_line=0
+        echo "Without CUDA:"
+    fi
     while IFS= read -r line; do
+        current_line=$((current_line + 1))
         lowercase_line=$(echo "$line" | tr '[:upper:]' '[:lower:]')
-        if [[ $lowercase_line == *"passed"* ]]; then
-            echo -e "${GREEN}$line${NC}"
-        elif [[ $lowercase_line == *"failed"* ]]; then
-            echo -e "${RED}$line${NC}"
-        elif [[ $lowercase_line == *"cuda on"* ]]; then
-            echo ""
-            echo "With CUDA:"
+
+        if [ "$current_line" -ge "$starting_line" ]; then
+            if [[ $lowercase_line == *"passed"* ]]; then
+                echo -e "${GREEN}$line${NC}"
+            elif [[ $lowercase_line == *"failed"* ]]; then
+                echo -e "${RED}$line${NC}"
+            elif [[ $lowercase_line == *"cuda on"* ]]; then
+                echo "With CUDA:"
+            fi
         fi
     done < "${LOGFILE}"
 }
@@ -194,12 +200,11 @@ elif [[ $# == 2 ]]; then
     readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test
+    results
     # Use CUDA
     ngc_rdma_test "use_cuda"
+    results "cuda"
 else
     help
 fi
 
-
-# Call the results function
-results
