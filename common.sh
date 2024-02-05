@@ -437,6 +437,11 @@ find_cuda() {
 get_cudas_per_rdma_device() {
     SERVER_TRUSTED="${1}"
     RDMA_DEVICE="$2"
+    USER_DEF_CUDA="${3}"
+    if [ -n "${USER_DEF_CUDA}" ]; then
+        echo "${USER_DEF_CUDA}"
+        return
+    fi
     GPUS_COUNT=$(ssh "${SERVER_TRUSTED}" "nvidia-smi -L" | wc -l)
     if ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -q "NIC Legend"
     then
@@ -943,7 +948,7 @@ run_perftest_servers() {
         prt=$((BASE_RDMA_PORT + dev_idx ))
         if [ $RUN_WITH_CUDA ]
             then
-            CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[dev_idx]}" | cut -d , -f 1)
+            CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[dev_idx]}" "${server_cuda_idx}" | cut -d , -f 1)
             server_cuda="--use_cuda=${CUDA_INDEX}"
             fi
         extra_server_args_str="${extra_server_args[*]//%%QPS%%/${server_QPS[dev_idx]}}"
@@ -969,7 +974,7 @@ run_perftest_clients() {
         prt=$((dev_base_port))
         if [ $RUN_WITH_CUDA ]
             then
-            CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}" | cut -d , -f 1)
+            CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}" "${client_cuda_idx}" | cut -d , -f 1)
             client_cuda="--use_cuda=${CUDA_INDEX}"
             fi
         ip_i=${SERVER_IPS[dev_idx]}
