@@ -25,6 +25,16 @@ do
             RUN_WITH_CUDA=true
             shift
             ;;
+        --server_cuda=*)
+            [ "${RUN_WITH_CUDA}" = true ] || fatal "--server_cuda can only be used with --use_cuda"
+            server_cuda_idx=${1#*=}
+            shift
+            ;;
+        --client_cuda=*)
+            [ "${RUN_WITH_CUDA}" = true ] || fatal "--client_cuda can only be used with --use_cuda"
+            client_cuda_idx=${1#*=}
+            shift
+            ;;
         --all_connection_types)
             ALL_CONN_TYPES=true
             shift
@@ -93,6 +103,8 @@ Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hos
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
+	--server_cuda=<cuda device index>: Use the specified cuda device
+	--client_cuda=<cuda device index>: Use the specified cuda device
 	--qp=<num of QPs>: Use the sepecified QPs' number (default: 4 QPs per device, max: ${max_qps})
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
