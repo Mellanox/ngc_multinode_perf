@@ -19,12 +19,14 @@ help() {
     cat <<EOF >&2
 
   Execute ngc_rdma_test.sh for each MLNX device on the hosts.
-  Run as root and make sure the hosts are passwordless, you can use IP / Hostname.
+  * Passwordless SSH access to the participating nodes is required.
+  * Passwordless sudo root access is required from the SSH'ing user.
+  * Dependencies which need to be installed: numctl, perftest.
   For external loopback, you may edit the pairs according to your connectivity.
 
   ${WHITE}Usage (b2b connectivity):
   $0 Server Client
-  For external loopback:
+  External Loopback connectivity:
   $0 Server${RESET}
 EOF
     exit 1
@@ -37,7 +39,7 @@ ngc_rdma_test() {
     local element
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
-        echo "NGC RDMA Test (Back2Back) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo -e "\nNGC RDMA Test (Back2Back) in progress... (CUDA on)" | tee -a "${LOGFILE}"
     else
         use_cuda=""
         echo "NGC RDMA Test (Back2Back) in progress... (CUDA off)" | tee -a "${LOGFILE}"
