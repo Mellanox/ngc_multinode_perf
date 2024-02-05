@@ -59,6 +59,10 @@ do
             IFS=',' read -ra lat_ms_list <<< "${1#*=}"
             shift
             ;;
+        --unidir)
+            RDMA_UNIDIR=true
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -212,8 +216,9 @@ for TEST in "${TESTS[@]}"; do
             bw_test=false
             ;;
         *_bw)
-            extra_client_args=("--report_gbit" "-b" "-q" "%%QPS%%")
-            extra_server_args=("--report_gbit" "-b" "-q" "%%QPS%%" "--output=bandwidth")
+            [ "${RDMA_UNIDIR}" = "true" ] && unset bidir || bidir="-b"
+            extra_client_args=("--report_gbit" "${bidir}" "-q" "%%QPS%%")
+            extra_server_args=("--report_gbit" "${bidir}" "-q" "%%QPS%%" "--output=bandwidth")
             bw_test=true
             ;;
         *)
