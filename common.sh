@@ -963,6 +963,7 @@ run_perftest_clients() {
     local -a cmd_arr
     local extra_client_args_str
     local dev_idx=0
+    [ "${RDMA_UNIDIR}" = true ] && multiplier=1 || multiplier=2
     for ((; dev_idx<NUM_DEVS; dev_idx++))
     do
         local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE + NUM_DEVS*NUM_CORES_PER_DEVICE + DUPLEX_OFFSET))
@@ -992,10 +993,10 @@ run_perftest_clients() {
         for ((dev_idx=0; dev_idx<NUM_DEVS; dev_idx++))
         do
             port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}")
-            BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", 2*0.9*${port_rate}}")"
+            BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", ${multiplier}*0.9*${port_rate}}")"
             BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
             check_if_number "$BW" || PASS=false
-            log "Device ${CLIENT_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * 2)) Gb/s)"
+            log "Device ${CLIENT_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * multiplier)) Gb/s)"
             if [[ $BW -lt ${BW_PASS_RATE} ]]
             then
                 log "Device ${CLIENT_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
