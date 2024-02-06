@@ -136,7 +136,7 @@ ngc_rdma_test_external_loopback() {
 check_ssh() {
     local failed_hosts=""
     for ip in "$@"; do
-        if ! ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${ip}" exit; then
+        if ! ssh "${ip}" exit; then
             failed_hosts+=" ${ip}"
         fi
     done
@@ -155,7 +155,7 @@ if [[ $# == 1 ]]; then
     # Get MLNX devices (PCIe & RDMA):
     ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
     ssh "${SERVER_IP}" dmidecode -t 0 |grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
-    readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
+    readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test_external_loopback
     # Use CUDA:
@@ -167,7 +167,7 @@ elif [[ $# == 2 ]]; then
     # Get MLNX devices (PCIe & RDMA):
     ssh "${SERVER_IP}" dmidecode -t 1 |grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
     ssh "${SERVER_IP}" dmidecode -t 0 |grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
-    readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
+    readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test
     wrapper_results
