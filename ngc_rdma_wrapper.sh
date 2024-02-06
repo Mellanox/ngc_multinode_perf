@@ -4,13 +4,10 @@ set -eE
 # Variables
 CLIENT_IP=${2}
 SERVER_IP=${1}
-WHITE='\033[1;37m'
-GREEN='\033[1;32m'
-RED='\033[1;31m'
-NC='\033[0m'
 scriptdir="$(dirname "$0")"
 LOGFILE="/tmp/ngc-rdma-test_$(date +%H:%M:%S__%d-%m-%Y).log"
 tests="--tests=ib_write_bw,ib_read_bw,ib_send_bw"
+source "${scriptdir}/common.sh"
 
 
 help() {
@@ -152,33 +149,6 @@ check_ssh() {
 }
 
 
-# Display results (taken from the logfile)
-results() {
-    local current_line=0
-    # Starting line (for CUDA)
-    if [[ "${1}" == "cuda" ]]; then
-        starting_line=$(grep -in "cuda on" "${LOGFILE}" | cut -d':' -f1)
-    else
-        starting_line=0
-        echo "Without CUDA:"
-    fi
-    while IFS= read -r line; do
-        current_line=$((current_line + 1))
-        lowercase_line=$(echo "$line" | tr '[:upper:]' '[:lower:]')
-
-        if [ "$current_line" -ge "$starting_line" ]; then
-            if [[ $lowercase_line == *"passed"* ]]; then
-                echo -e "${GREEN}$line${NC}"
-            elif [[ $lowercase_line == *"failed"* ]]; then
-                echo -e "${RED}$line${NC}"
-            elif [[ $lowercase_line == *"cuda on"* ]]; then
-                echo "With CUDA:"
-            fi
-        fi
-    done < "${LOGFILE}"
-}
-
-
 # If 1 host provided, run external loopback test:
 if [[ $# == 1 ]]; then
     check_ssh "${SERVER_IP}"
@@ -200,11 +170,10 @@ elif [[ $# == 2 ]]; then
     readarray -t SERVER_MLNX <<< "$(ssh -q -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test
-    results
+    wrapper_results
     # Use CUDA
     ngc_rdma_test "use_cuda"
-    results "cuda"
+    wrapper_results "cuda"
 else
     help
 fi
-

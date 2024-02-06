@@ -1105,3 +1105,30 @@ print_stats(){
     total_active_avarage=`get_average ${usages[@]}`
     paste <(echo "${server}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
 }
+
+
+# Display results (taken from the logfile, used for the wrapper scripts)
+wrapper_results() {
+    local current_line=0
+    # Starting line (for CUDA)
+    if [[ "${1}" == "cuda" ]]; then
+        starting_line=$(grep -in "cuda on" "${LOGFILE}" | cut -d':' -f1)
+    else
+        starting_line=0
+        echo "Without CUDA:"
+    fi
+    while IFS= read -r line; do
+        current_line=$((current_line + 1))
+        lowercase_line=$(echo "$line" | tr '[:upper:]' '[:lower:]')
+
+        if [[ "$current_line" -ge "$starting_line" ]]; then
+            if [[ $lowercase_line == *"passed"* ]]; then
+                echo -e "${GREEN}$line${NC}"
+            elif [[ $lowercase_line == *"failed"* ]]; then
+                echo -e "${RED}$line${NC}"
+            elif [[ $lowercase_line == *"cuda on"* ]]; then
+                echo "With CUDA:"
+            fi
+        fi
+    done < "${LOGFILE}"
+}
