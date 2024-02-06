@@ -135,7 +135,7 @@ FORCE_EXIT=false
 #CLIENT_TRUSTED,CLIENT_DEVICES,SERVER_TRUSTED,SERVER_DEVICES,NUM_INST,opt_proc,CORES_ARRAY
 tune_tcp
 #Relaxed ordring was disabled - user need to restart the driver so that the change take affect.
-[ $FORCE_EXIT = true ] && echo -e "${RED}Please restart driver after disabling relaxed ordering (RO), and run the script again ${NC}" && exit 1
+[ "${FORCE_EXIT}" != "true" ] || fatal "Please restart driver after disabling relaxed ordering (RO), and run the script again."
 
 TIME_STAMP=$(date +%s)
 #Run server side
