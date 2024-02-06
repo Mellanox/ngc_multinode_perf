@@ -799,8 +799,8 @@ tune_tcp() {
 
         ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
         ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
-        log "INFO:Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
-        log "INFO:Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
+        log "INFO: Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
+        log "INFO: Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
         #Enable aRFS
         if [ ${LINK_TYPE} -eq 1 ]; then
             enable_aRFS "${SERVER_TRUSTED}" "${server_netdev}"
@@ -870,7 +870,7 @@ run_iperf_clients() {
             prt=$((dev_base_port + i ))
             ip_i=${SERVER_IPS[dev_idx]}
             echo "taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i}   -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & " >> ${iperf_clients_to_run_client_side}
-            log "INFO: run taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i}   -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log & "
+            log "INFO: Run taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i} -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log & "
         done
         #If full duplex then create iperf3 clients on server side
         if [ "$DUPLEX"  = true ]
@@ -885,7 +885,7 @@ run_iperf_clients() {
                 prt=$((dev_base_port + i ))
                 ip_i=${CLIENT_IPS[dev_idx]}
                 echo "taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i} -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & " >> ${iperf_clients_to_run_server_side}
-                log "INFO: run on server side the iperf clients: taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i}   -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & "
+                log "INFO: Run on server side the iperf clients: taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i} -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & "
             done
         fi
     done
@@ -898,7 +898,7 @@ run_iperf_clients() {
     fi
     #Run all iperf clients
     ssh ${CLIENT_TRUSTED} "bash ${iperf_clients_to_run_client_side}" &> /dev/null &
-    log "INFO:iperf3 clietns start to run , wait for ${TEST_DURATION}sec for the test to finish"
+    log "INFO: iperf3 clietns start to run, wait for ${TEST_DURATION}sec for the test to finish"
 }
 
 ports_device_identifier() {
