@@ -869,8 +869,13 @@ run_iperf_clients() {
             dev_base_port=$((BASE_TCP_POTR + 10000*dev_idx))
             prt=$((dev_base_port + i ))
             ip_i=${SERVER_IPS[dev_idx]}
-            echo "taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i}   -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & " >> ${iperf_clients_to_run_client_side}
-            log "INFO: Run taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i} -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log & "
+            cmd_arr=("taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
+                     "-c" "${ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}" "-J"
+                     "--logfile"
+                     "/tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
+                     "&")
+            echo "${cmd_arr[*]}" >> ${iperf_clients_to_run_client_side}
+            log "INFO: Run ${cmd_arr[*]}"
         done
         #If full duplex then create iperf3 clients on server side
         if [ "$DUPLEX"  = true ]
@@ -884,8 +889,13 @@ run_iperf_clients() {
                 dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
                 prt=$((dev_base_port + i ))
                 ip_i=${CLIENT_IPS[dev_idx]}
-                echo "taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i} -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & " >> ${iperf_clients_to_run_server_side}
-                log "INFO: Run on server side the iperf clients: taskset -c $core iperf3 -Z -N -i 60 -c ${ip_i} -t ${TEST_DURATION} -p $prt -J --logfile /tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log  & "
+                cmd_arr=("taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
+                         "-c" "${ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}"
+                         "-J" "--logfile"
+                         "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
+                         "&")
+                echo "${cmd_arr[*]}" >> ${iperf_clients_to_run_server_side}
+                log "INFO: Run on server side the iperf clients: ${cmd_arr[*]}"
             done
         fi
     done
