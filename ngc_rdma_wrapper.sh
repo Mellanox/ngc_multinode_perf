@@ -83,13 +83,18 @@ ngc_rdma_test() {
         # If the device is Dual Port
         if [[ $dual_port == true ]]; then
             echo -e "${WHITE}Dual Port -  1st Port: ${MLX} PCI: ${PCI_DEVICE} | 2nd Port: ${MLX2} PCI: ${PCI_DEVICE2}${NC}" &>> "${LOGFILE}"
-            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${MLX}","${MLX2}" "${CLIENT_IP}" "${MLX}","${MLX2}" "${tests}" ${use_cuda} &>> "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${MLX}","${MLX2}" "${CLIENT_IP}" "${MLX}","${MLX2}" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
+                echo "${RED}Issue with device ${MLX} <-> ${MLX2}" | tee -a "${LOGFILE}${NC}"
+            fi
 
         # If the device is Single Port:
         else
             echo -e "${WHITE}Single Port - ${MLX} Located on PCI: ${PCI_DEVICE}${NC}" &>> "${LOGFILE}"
-            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${MLX}" "${CLIENT_IP}" "${MLX}" "${tests}" ${use_cuda} &>> "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${MLX}" "${CLIENT_IP}" "${MLX}" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
+                echo "${RED}Issue with device ${MLX} <-> ${MLX}" | tee -a "${LOGFILE}${NC}"
+            fi
         fi
+        wrapper_results
     done
 }
 
@@ -123,15 +128,20 @@ ngc_rdma_test_external_loopback() {
         second="${pair#*,}"
         if [[ "$first" == "1" ]]; then
             echo -e "${WHITE}Dual Port -  1st Card: mlx5_1, mlx5_2 | 2nd Card: mlx5_7, mlx5_8${NC}" &>> "${LOGFILE}"
-            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_1","mlx5_2" "${SERVER_IP}" "mlx5_7","mlx5_8" "${tests}" ${use_cuda} &>> "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_1","mlx5_2" "${SERVER_IP}" "mlx5_7","mlx5_8" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
+                echo "${RED}Issue with device mlx5_1, mlx5_2 <-> mlx5_7, mlx5_8" | tee -a "${LOGFILE}${NC}"
+            fi
         # Skip to avoid duplicates of the second port
         elif [[ "$first" == "2" ]]; then
             continue
         # Single Ports
         else
             echo -e "${WHITE}Single Port - mlx5_${first} mlx5_${second}${NC}" &>> "${LOGFILE}"
-            "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_${first}" "${SERVER_IP}" "mlx5_${second}" "${tests}" ${use_cuda} &>> "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_${first}" "${SERVER_IP}" "mlx5_${second}" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
+                echo "${RED}Issue with device mlx5_${first} <-> mlx5_${second}" | tee -a "${LOGFILE}${NC}"
+            fi
         fi
+        wrapper_results
     done
 }
 
@@ -174,10 +184,8 @@ elif [[ $# == 2 ]]; then
     readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" "sudo mst status -v"  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
     # Without CUDA
     ngc_rdma_test
-    wrapper_results
     # Use CUDA
     ngc_rdma_test "use_cuda"
-    wrapper_results "cuda"
 else
     help
 fi
