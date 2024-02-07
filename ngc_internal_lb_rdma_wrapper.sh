@@ -86,11 +86,7 @@ ngc_rdma_internal_lp() {
         if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${i}" "${SERVER_IP}" "${i}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
             echo "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}${NC}"
         fi
-        if [[ "${1}" == "use_cuda" ]]; then
-            wrapper_results "cuda"
-        else
-            wrapper_results
-        fi
+        wrapper_results
     done
 }
 
@@ -110,7 +106,7 @@ ngc_rdma_vm_internal_lp() {
             if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} --server_cuda="${gpu_index}" --client_cuda="${gpu_index}" "--unidir" &>> "${LOGFILE}" ; then
                 echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}${NC}"
             fi
-            wrapper_results "cuda"
+            wrapper_results
         done
     else
         use_cuda=""
