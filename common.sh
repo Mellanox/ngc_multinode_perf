@@ -1107,28 +1107,17 @@ print_stats(){
 }
 
 
-# Display results (taken from the logfile, used for the wrapper scripts)
 wrapper_results() {
-    local current_line=0
-    # Starting line (for CUDA)
-    if [[ "${1}" == "cuda" ]]; then
-        starting_line=$(grep -in "cuda on" "${LOGFILE}" | cut -d':' -f1)
-    else
-        starting_line=0
-        echo "Without CUDA:"
-    fi
-    while IFS= read -r line; do
-        current_line=$((current_line + 1))
+    start_line=${start_line:-0}
+    # Read the file from the last-read line
+    awk "NR >= ${start_line}" "${LOGFILE}"| while IFS= read -r line; do
         lowercase_line=$(echo "$line" | tr '[:upper:]' '[:lower:]')
-
-        if [[ "$current_line" -ge "$starting_line" ]]; then
-            if [[ $lowercase_line == *"passed"* ]]; then
-                echo -e "${GREEN}$line${NC}"
-            elif [[ $lowercase_line == *"failed"* ]]; then
-                echo -e "${RED}$line${NC}"
-            elif [[ $lowercase_line == *"cuda on"* ]]; then
-                echo "With CUDA:"
-            fi
+        if [[ $lowercase_line == *"passed"* ]]; then
+            echo -e "${GREEN}$line${NC}"
+        elif [[ $lowercase_line == *"failed"* ]]; then
+            echo -e "${RED}$line${NC}"
         fi
-    done < "${LOGFILE}"
+    # Save the next line number to the variable
+    done
+    start_line=$(($(wc -l < "${LOGFILE}") + 1))
 }
