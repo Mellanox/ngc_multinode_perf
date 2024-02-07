@@ -1106,7 +1106,6 @@ print_stats(){
     paste <(echo "${server}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
 }
 
-
 wrapper_results() {
     start_line=${start_line:-0}
     # Read the file from the last-read line
@@ -1117,7 +1116,7 @@ wrapper_results() {
         elif [[ $lowercase_line == *"failed"* ]]; then
             echo -e "${RED}$line${NC}"
         fi
-    # Save the next line number to the variable
     done
+    # Save the next line number to the variable
     start_line=$(($(wc -l < "${LOGFILE}") + 1))
 }
