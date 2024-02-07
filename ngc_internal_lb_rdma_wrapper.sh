@@ -37,6 +37,7 @@ help() {
   Internal Loopback wrapper for ngc_rdma_test.sh
   A Logfile is created under /tmp/
   RDMA devices are obtained from 'ibdev2netdev' command.
+  Criteria for Pass/Fail - 90% line rate of the port speed.
 
   * Passwordless SSH access to the participating nodes is required.
   * Passwordless sudo root access is required from the SSH'ing user.
@@ -57,7 +58,7 @@ help() {
   $0 Server
 
   Hosts with different NIC<->GPU affinity:
-  $0 Server \$FILE${RESET}
+  $0 Server \$FILE --with_cuda${RESET}
 
 EOF
     exit 1
@@ -70,11 +71,11 @@ ngc_rdma_internal_lp() {
     # Determine the current test being run (CUDA on/off)
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
-        echo -e "\nNGC RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:"
     else
         use_cuda=""
-        echo "NGC RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+        echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
         echo -e "${WHITE}--- Results ---${NC}"
         echo "Without CUDA:"
     fi
@@ -97,7 +98,7 @@ ngc_rdma_vm_internal_lp() {
     # Determine the current test being run (CUDA on/off)
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
-        echo -e "\nNGC RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:" | tee -a "${LOGFILE}"
           # Loop over the Host devices
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
@@ -110,7 +111,7 @@ ngc_rdma_vm_internal_lp() {
         done
     else
         use_cuda=""
-        echo "NGC RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+        echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
         echo -e "${WHITE}--- Results ---${NC}" | tee -a "${LOGFILE}"
         echo "Without CUDA:" | tee -a "${LOGFILE}"
           # Loop over the Host devices
@@ -165,7 +166,7 @@ nic_to_gpu_affinity() {
             break
             ;;
         [nN])
-            echo "Exiting.."
+            echo "Please provide affinity file (see README)"
             exit 0
             ;;
         *)
