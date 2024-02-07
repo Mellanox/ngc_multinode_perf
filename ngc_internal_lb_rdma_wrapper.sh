@@ -157,6 +157,7 @@ nic_to_gpu_affinity() {
     fi
 
     # Ask the user to confirm
+    tries=0
     while true; do
         read -r -p "Is the affinity correct? [yY]/[nN]: " user_confirm
         case "${user_confirm}" in
@@ -166,6 +167,12 @@ nic_to_gpu_affinity() {
         [nN])
             echo "Exiting.."
             exit 0
+            ;;
+        *)
+            tries=$(( tries + 1 ))
+            if (( tries == 3 )); then
+                fatal "Reached maximum attempts. Exiting.."
+            fi
             ;;
         esac
     done
