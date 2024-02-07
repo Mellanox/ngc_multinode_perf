@@ -38,9 +38,11 @@ ngc_rdma_test() {
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
         echo -e "\nNGC RDMA Test (Back2Back) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo "With CUDA:"
     else
         use_cuda=""
         echo "NGC RDMA Test (Back2Back) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+        echo "Without CUDA:"
     fi
 
     # Loop over the Host devices
@@ -107,9 +109,11 @@ ngc_rdma_test_external_loopback() {
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
         echo "NGC RDMA Test (External Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo "With CUDA:"
     else
         use_cuda=""
         echo "NGC RDMA Test (External Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+        echo "Without CUDA:"
     fi
 
     # Loop through pairs and send to ngc test
