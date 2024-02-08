@@ -73,7 +73,7 @@ Will configure IPsec full offload on both client and server DPU, and then run a 
 
 ## IPsec crypto offload test
 
-* Relevant for connectX-6 DX only.
+* Relevant for new HCAs (ConnectX-6 DX and above). 
 
 Will configure IPsec crypto offload on both client and server, run TCP test,
 and remove IPsec configuration.
@@ -87,14 +87,18 @@ and remove IPsec configuration.
 
 * The number of tunnels should not exceed the number of IPs configured on the NICs.
 
+## Perftest with CUDA
+
+* The nvidia-peermem driver should be loaded.
+
+For running with CUDA, Perftest should be built with CUDA support.
+
 ## Tuning instructions and HW/FW requirements
 
 | Item                                    | Description                    |
 |-----------------------------------------|--------------------------------|
-| ConnectX-6 Firmware version             | 20.29.2002                     |
-| ConnectX-6 Dx Firmware version          | 22.29.2002                     |
-| BlueField-2 Firmware version            | 24.29.2002                     |
-| MLNX_OFED Version                       | MLNX_OFED_LINUX-5.2-2.2.0.0    |
+| HCA Firmware version                    | Latest_GA                      |
+| MLNX_OFED Version                       | Latest_GA                      |
 | Eth Switch ports                        | Set MTU to 9216<br>Enable PFC and ECN using the single "Do ROCE" command |
 | IB Switch OpenSM                        | Change IPoIB MTU to 4K:<br>[standalone: master] → en<br>[standalone: master] # conf t<br>[standalone: master] (config) # ib partition Default mtu 4K force |
 | **AMD CPUs: EPYC 7002 and 7003 series** |                                |
