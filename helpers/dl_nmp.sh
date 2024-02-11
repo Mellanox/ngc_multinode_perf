@@ -2,7 +2,7 @@
 
 set -eE
 
-api_url="https://api.github.com/repos/Mellanox/ngc_multinode_perf/tags"
+api_url="https://api.github.com/repos/Mellanox/ngc_multinode_perf"
 
 kind="${1}"
 
