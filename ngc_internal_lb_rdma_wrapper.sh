@@ -46,8 +46,8 @@ help() {
     WHITE=$(tput bold)
     RESET=$(tput sgr0)
     cat <<EOF >&2
-  Internal Loopback wrapper for ngc_rdma_test.sh
-  A Logfile is created under /tmp/
+  Internal Loopback wrapper for ngc_rdma_test.sh.
+  A Logfile is created under /tmp/.
   RDMA devices are obtained from 'ibdev2netdev' command.
   Criteria for Pass/Fail - 90% line rate of the port speed.
 
@@ -55,17 +55,24 @@ help() {
   * Passwordless sudo root access is required from the SSH'ing user.
   * Dependencies which need to be installed: numctl, perftest.
 
-  ** For Virtual Machines, you can change the NIC<->GPU affinity by
+  * For Virtual Machines, you can change the NIC<->GPU affinity by
   providing the affinity in a file.
   The file should consist two lines, one for GPUs and the other for NICs.
   Example:
   echo "mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_6 mlx5_7" > gpuaff.txt
   echo "GPU6 GPU3 GPU1 GPU7 GPU4 GPU2 GPU0 GPU5" >> gpuaff.txt
 
+  Options:
+  --write     # Run write tests only
+  --read      # Run read tests only
+  --with_cuda # Run both RDMA and GPUDirect
+  --cuda_only # Run only GPUDirect
+
   ${WHITE}Usage:
+  Run RDMA & GPUDirect:
   $0 Server --with_cuda
 
-  Run without CUDA:
+  Run RDMA only:
   $0 Server
 
   Hosts with different NIC<->GPU affinity:
@@ -209,10 +216,11 @@ if (( $# == 1  ||  $# == 2 )); then
     check_ssh "${SERVER_IP}"
     # Get device's BIOS info
     ssh "${SERVER_IP}" sudo dmidecode -t 0,1 &> "${LOGFILE}"
+    echo "=== Server: ${SERVER_IP} ===" &>> "${LOGFILE}"
     log "Created log file: ${LOGFILE}"
 
     # Determine if host is a VM
-    if grep -iqE "qemu|virtual" "${LOGFILE}"; then
+    if grep -iqE "qemu|virtual|microsoft" "${LOGFILE}"; then
         # Check GPU affinity
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
             nic_to_gpu_affinity
