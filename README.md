@@ -93,6 +93,21 @@ and remove IPsec configuration.
 
 For running with CUDA, Perftest should be built with CUDA support.
 
+## Download the latest stable version
+
+Besides cloning and checking out to the latest stable release, you can also use
+the following helper script:
+
+```bash
+curl -Lfs https://raw.githubusercontent.com/Mellanox/ngc_multinode_perf/main/helpers/dl_nmp.sh | bash
+```
+
+And to download the latest 'experimental' (rc) version:
+
+```bash
+curl -Lfs https://raw.githubusercontent.com/Mellanox/ngc_multinode_perf/main/helpers/dl_nmp.sh | bash -s -- rc
+```
+
 ## Tuning instructions and HW/FW requirements
 
 | Item                                    | Description                    |
