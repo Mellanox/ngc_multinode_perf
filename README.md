@@ -41,6 +41,10 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     [--lat_message_size_list=<list of message sizes>]
 ```
 
+* If running with CUDA:
+    * The nvidia-peermem driver should be loaded.
+    * Perftest should be built with CUDA support.
+
 ## TCP test
 
 Will automatically detect device local NUMA node, disable IRQ balancer,
@@ -86,12 +90,6 @@ and remove IPsec configuration.
 ```
 
 * The number of tunnels should not exceed the number of IPs configured on the NICs.
-
-## Perftest with CUDA
-
-* The nvidia-peermem driver should be loaded.
-
-For running with CUDA, Perftest should be built with CUDA support.
 
 ## Download the latest stable version
 
