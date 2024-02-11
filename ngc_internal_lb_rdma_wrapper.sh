@@ -236,6 +236,8 @@ if (( $# == 1  ||  $# == 2 )); then
         fi
     else
         # Loopback without CUDA
+        readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" ibdev2netdev | awk '{print $1}')" ||
+            fatal "Couldn't get NICs from ibdev2netdev"
         ngc_rdma_internal_lp
         # Loopback test with CUDA
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
