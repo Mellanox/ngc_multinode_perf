@@ -14,6 +14,18 @@ while [ $# -gt 0 ]; do
             RUN_WITH_CUDA=true
             shift
             ;;
+        --cuda_only)
+            ONLY_CUDA=true
+            shift
+            ;;
+        --write)
+            tests="ib_write_bw"
+            shift
+            ;;
+        --read)
+            tests="ib_read_bw"
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -73,6 +85,9 @@ ngc_rdma_internal_lp() {
         echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:"
     else
+        if [ "${ONLY_CUDA}" = "true" ]; then
+            return
+        fi
         use_cuda=""
         echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
         echo -e "${WHITE}--- Results ---${NC}"
@@ -109,6 +124,9 @@ ngc_rdma_vm_internal_lp() {
             wrapper_results
         done
     else
+        if [ "${ONLY_CUDA}" = "true" ]; then
+            return
+        fi
         use_cuda=""
         echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
         echo -e "${WHITE}--- Results ---${NC}" | tee -a "${LOGFILE}"
