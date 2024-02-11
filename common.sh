@@ -1110,10 +1110,9 @@ wrapper_results() {
     start_line=${start_line:-0}
     # Read the file from the last-read line
     awk "NR >= ${start_line}" "${LOGFILE}"| while IFS= read -r line; do
-        lowercase_line=$(echo "$line" | tr '[:upper:]' '[:lower:]')
-        if [[ $lowercase_line == *"passed"* ]]; then
+        if [[ $line == *"Passed"* ]]; then
             echo -e "${GREEN}$line${NC}"
-        elif [[ $lowercase_line == *"failed"* ]]; then
+        elif [[ $line == *"Failed"* ]]; then
             echo -e "${RED}$line${NC}"
         fi
     done
