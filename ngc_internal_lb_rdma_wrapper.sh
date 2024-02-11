@@ -44,12 +44,11 @@ help() {
   * Dependencies which need to be installed: numctl, perftest.
 
   ** For Virtual Machines, you can change the NIC<->GPU affinity by
-  creating an providing the affinity in a file.should consist a two lines,
+  providing the affinity in a file.
   The file should consist two lines, one for GPUs and the other for NICs.
   Example:
   echo "mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_6 mlx5_7" > gpuaff.txt
   echo "GPU6 GPU3 GPU1 GPU7 GPU4 GPU2 GPU0 GPU5" >> gpuaff.txt
-
 
   ${WHITE}Usage:
   $0 Server --with_cuda
