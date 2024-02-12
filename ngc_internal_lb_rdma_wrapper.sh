@@ -112,6 +112,7 @@ ngc_rdma_internal_lb() {
         echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:"
     else
+
         if [ "${ONLY_CUDA}" = "true" ]; then
             return
         fi
@@ -126,7 +127,7 @@ ngc_rdma_internal_lb() {
         # Store the current element's value in a variable
         echo -e "${WHITE}=== Device: ${i} ===${NC}" &>> "${LOGFILE}"
         if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${i}" "${SERVER_IP}" "${i}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
-            echo "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}" | tee -a "${LOGFILE}${NC}"
+            echo "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}" | tee -a "${LOGFILE}"
         fi
         wrapper_results
     done
@@ -146,10 +147,11 @@ ngc_rdma_vm_internal_lb() {
             gpu_index="${GPU_ARR[i]//[!0-9]/}"
             echo -e "${WHITE}=== Devices: ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]} ===${NC}" &>> "${LOGFILE}"
             if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} --server_cuda="${gpu_index}" --client_cuda="${gpu_index}" "--unidir" &>> "${LOGFILE}" ; then
-                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}${NC}"
+                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}${NC}" | tee -a "${LOGFILE}"
             fi
             wrapper_results
         done
+
     else
         if [ "${ONLY_CUDA}" = "true" ]; then
             return
@@ -158,6 +160,7 @@ ngc_rdma_vm_internal_lb() {
         echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
         echo -e "${WHITE}--- Results ---${NC}" | tee -a "${LOGFILE}"
         echo "Without CUDA:" | tee -a "${LOGFILE}"
+
           # Loop over the Host devices
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
             echo -e "${WHITE}=== Device: ${SERVER_MLNX[i]} ===${NC}" &>> "${LOGFILE}"
