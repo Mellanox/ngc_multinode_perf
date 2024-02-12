@@ -19,11 +19,11 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --write)
-            tests="ib_write_bw"
+            tests="--tests=ib_write_bw"
             shift
             ;;
         --read)
-            tests="ib_read_bw"
+            tests="--tests=ib_read_bw"
             shift
             ;;
         --*)
@@ -220,7 +220,7 @@ if (( $# == 1  ||  $# == 2 )); then
     log "Created log file: ${LOGFILE}"
 
     # Determine if host is a VM
-    if grep -iqE "qemu|virtual|microsoft" "${LOGFILE}"; then
+    if grep -iqE "qemu|virtual" "${LOGFILE}"; then
         # Check GPU affinity
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
             nic_to_gpu_affinity
