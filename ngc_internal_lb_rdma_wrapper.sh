@@ -84,7 +84,7 @@ EOF
 
 
 # Internal loopback function for Hosts
-ngc_rdma_internal_lp() {
+ngc_rdma_internal_lb() {
     local use_cuda
     # Determine the current test being run (CUDA on/off)
     if [[ "${1}" == "use_cuda" ]]; then
@@ -106,7 +106,7 @@ ngc_rdma_internal_lp() {
         # Store the current element's value in a variable
         echo -e "${WHITE}=== Device: ${i} ===${NC}" &>> "${LOGFILE}"
         if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${i}" "${SERVER_IP}" "${i}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
-            echo "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}${NC}"
+            echo "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}" | tee -a "${LOGFILE}${NC}"
         fi
         wrapper_results
     done
@@ -114,7 +114,7 @@ ngc_rdma_internal_lp() {
 
 
 # Internal loopback function for VMs
-ngc_rdma_vm_internal_lp() {
+ngc_rdma_vm_internal_lb() {
     local use_cuda
     # Determine the current test being run (CUDA on/off)
     if [[ "${1}" == "use_cuda" ]]; then
@@ -142,7 +142,7 @@ ngc_rdma_vm_internal_lp() {
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
             echo -e "${WHITE}=== Device: ${SERVER_MLNX[i]} ===${NC}" &>> "${LOGFILE}"
             if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
-                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}${NC}"  | tee -a "${LOGFILE}"
+                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}"  | tee -a "${LOGFILE}"
             fi
             wrapper_results
         done
@@ -229,19 +229,19 @@ if (( $# == 1  ||  $# == 2 )); then
                 fatal "Couldn't get NICs from ibdev2netdev"
         fi
         # Loopback without CUDA
-        ngc_rdma_vm_internal_lp
+        ngc_rdma_vm_internal_lb
         # Loopback with CUDA
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
-            ngc_rdma_vm_internal_lp "use_cuda"
+            ngc_rdma_vm_internal_lb "use_cuda"
         fi
     else
         # Loopback without CUDA
         readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" ibdev2netdev | awk '{print $1}')" ||
             fatal "Couldn't get NICs from ibdev2netdev"
-        ngc_rdma_internal_lp
+        ngc_rdma_internal_lb
         # Loopback test with CUDA
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
-            ngc_rdma_internal_lp "use_cuda"
+            ngc_rdma_internal_lb "use_cuda"
         fi
     fi
 else
