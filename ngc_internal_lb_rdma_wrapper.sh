@@ -10,12 +10,25 @@ source "${scriptdir}/common.sh"
 # Parse command line options
 while [ $# -gt 0 ]; do
     case "${1}" in
+        --vm)
+            RUN_AS_VM=true
+            shift
+            ;;
+        --aff)
+            if [ -f "${2}" ]; then
+                AFFINITY_FILE="${2}"
+                shift 2
+            else
+                fatal "--aff parameter requires a file"
+            fi
+            ;;
         --with_cuda)
             RUN_WITH_CUDA=true
             shift
             ;;
         --cuda_only)
             ONLY_CUDA=true
+            RUN_WITH_CUDA=true
             shift
             ;;
         --write)
@@ -38,7 +51,12 @@ done
 
 set -- "${POSITIONAL_ARGS[@]}"
 SERVER_IP=${1}
-AFFINITY_FILE=${2}
+
+
+# Check if --aff is provided without --with_one or --only_one
+if [ -n "${AFFINITY_FILE}" ] && [ -z "${RUN_WITH_CUDA}" ] && [ -z "${ONLY_CUDA}" ]; then
+    fatal "If --aff is provided, either --with_cuda or --cuda_only must also be provided."
+fi
 
 
 help() {
@@ -63,6 +81,8 @@ help() {
   echo "GPU6 GPU3 GPU1 GPU7 GPU4 GPU2 GPU0 GPU5" >> gpuaff.txt
 
   Options:
+  --vm        # Use this flag when running on a VM
+  --aff       # Used with the --vm flag to provide a different NIC<->GPU affinity
   --write     # Run write tests only
   --read      # Run read tests only
   --with_cuda # Run both RDMA and GPUDirect
@@ -76,7 +96,7 @@ help() {
   $0 Server
 
   Hosts with different NIC<->GPU affinity:
-  $0 Server \$FILE --with_cuda${RESET}
+  $0 Server --vm --aff \$FILE --with_cuda${RESET}
 
 EOF
     exit 1
@@ -152,7 +172,6 @@ ngc_rdma_vm_internal_lb() {
 
 # Determine nic <-> gpu affinity function
 nic_to_gpu_affinity() {
-    echo -e "${WHITE}Hostname provided detected as a Virtual Machine${NC}"| tee -a "${LOGFILE}"
     # Display NIC & GPU affinity according to file
     if [ -n "${AFFINITY_FILE}" ]; then
         if [ -f "${AFFINITY_FILE}" ]; then
@@ -212,15 +231,15 @@ check_ssh() {
 }
 
 
-if (( $# == 1  ||  $# == 2 )); then
+if (( $# == 1 )); then
     check_ssh "${SERVER_IP}"
     # Get device's BIOS info
     ssh "${SERVER_IP}" sudo dmidecode -t 0,1 &> "${LOGFILE}"
     echo "=== Server: ${SERVER_IP} ===" &>> "${LOGFILE}"
     log "Created log file: ${LOGFILE}"
 
-    # Determine if host is a VM
-    if grep -iqE "qemu|virtual" "${LOGFILE}"; then
+    # Determine if affinity file is provided
+    if [ "${RUN_AS_VM}" = "true" ]; then
         # Check GPU affinity
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
             nic_to_gpu_affinity
