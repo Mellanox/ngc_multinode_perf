@@ -1112,7 +1112,7 @@ wrapper_results() {
     awk "NR >= ${start_line}" "${LOGFILE}"| while IFS= read -r line; do
         if [[ $line == *"Passed"* ]]; then
             echo -e "${GREEN}$line${NC}"
-        elif [[ $line == *"Failed"* ]]; then
+        elif [[ $line == *"Failed for"* ]]; then
             echo -e "${RED}$line${NC}"
         fi
     done
