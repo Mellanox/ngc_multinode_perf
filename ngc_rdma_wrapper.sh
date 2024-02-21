@@ -2,12 +2,63 @@
 set -eE
 
 # Variables
-CLIENT_IP=${2}
-SERVER_IP=${1}
 scriptdir="$(dirname "$0")"
 LOGFILE="/tmp/ngc-rdma-test_$(date +%H:%M:%S__%d-%m-%Y).log"
 tests="--tests=ib_write_bw,ib_read_bw,ib_send_bw"
 source "${scriptdir}/common.sh"
+
+# Parse command line options
+while [ $# -gt 0 ]; do
+    case "${1}" in
+        --vm)
+            RUN_AS_VM=true
+            shift
+            ;;
+        --aff)
+            if [ -f "${2}" ]; then
+                AFFINITY_FILE="${2}"
+                RUN_AS_VM=true
+                shift 2
+            else
+                fatal "--aff parameter requires a file"
+            fi
+            ;;
+        --with_cuda)
+            RUN_WITH_CUDA=true
+            shift
+            ;;
+        --cuda_only)
+            ONLY_CUDA=true
+            RUN_WITH_CUDA=true
+            shift
+            ;;
+        --write)
+            tests="--tests=ib_write_bw"
+            shift
+            ;;
+        --read)
+            tests="--tests=ib_read_bw"
+            shift
+            ;;
+        --*)
+            fatal "Unknown option ${1}"
+            ;;
+        *)
+            POSITIONAL_ARGS+=("${1}")
+            shift
+            ;;
+    esac
+done
+
+set -- "${POSITIONAL_ARGS[@]}"
+CLIENT_IP=${2}
+SERVER_IP=${1}
+
+
+# Check if --aff is provided without --with_cuda or --cuda_only
+if [ -n "${AFFINITY_FILE}" ] && [ -z "${RUN_WITH_CUDA}" ] && [ -z "${ONLY_CUDA}" ]; then
+    fatal "If --aff is provided, either --with_cuda or --cuda_only must also be provided."
+fi
 
 
 help() {
@@ -15,17 +66,39 @@ help() {
     WHITE=$(tput bold)
     RESET=$(tput sgr0)
     cat <<EOF >&2
+  Wrapper for ngc_rdma_test.sh for each MLNX device on the host.
+  A Logfile is created under /tmp/.
+  Criteria for Pass/Fail - 90% line rate of the port speed.
+  For external loopback, you may edit the pairs according to your connectivity.
 
-  Execute ngc_rdma_test.sh for each MLNX device on the hosts.
   * Passwordless SSH access to the participating nodes is required.
   * Passwordless sudo root access is required from the SSH'ing user.
   * Dependencies which need to be installed: numctl, perftest.
-  For external loopback, you may edit the pairs according to your connectivity.
 
-  ${WHITE}Usage (b2b connectivity):
-  $0 Server Client
-  External Loopback connectivity:
+  * For Virtual Machines, you can change the NIC<->GPU affinity by
+  providing the affinity in a file.
+  The file should consist two lines, one for GPUs and the other for NICs.
+  Example:
+  echo "mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_6 mlx5_7" > gpuaff.txt
+  echo "GPU6 GPU3 GPU1 GPU7 GPU4 GPU2 GPU0 GPU5" >> gpuaff.txt
+
+  Options:
+  --vm        # Use this flag when running on a VM
+  --aff       # Used with the --vm flag to provide a different NIC<->GPU affinity
+  --write     # Run write tests only
+  --read      # Run read tests only
+  --with_cuda # Run both RDMA and GPUDirect
+  --cuda_only # Run only GPUDirect
+
+  ${WHITE}Usage:
+  RDMA & GPUDirect:
+  $0 Server Client --with_cuda
+
+  External Loopback connectivity (Without GPUDirect):
   $0 Server${RESET}
+
+  Hosts with different NIC<->GPU affinity:
+  $0 Server Client --vm --aff \$FILE --with_cuda${RESET}
 EOF
     exit 1
 }
@@ -40,6 +113,9 @@ ngc_rdma_test() {
         echo -e "\nNGC RDMA Test (Back2Back) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:"
     else
+        if [ "${ONLY_CUDA}" = "true" ]; then
+            return
+        fi
         use_cuda=""
         echo "NGC RDMA Test (Back2Back) in progress... (CUDA off)" | tee -a "${LOGFILE}"
         echo "Without CUDA:"
@@ -69,7 +145,7 @@ ngc_rdma_test() {
             fi
         done
 
-        # Store  the next index in the SERVER_MLNX
+        # Store the next index in the SERVER_MLNX
         next_index=$((i + 1))
         # Determine whether there is another element in the SERVER_MLNX to skip to
         if [ "${next_index}" -lt "${#SERVER_MLNX[@]}" ]; then
@@ -99,6 +175,46 @@ ngc_rdma_test() {
 }
 
 
+# Internal loopback function for VMs
+ngc_rdma_vm_test() {
+    local use_cuda
+    # Determine the current test being run (CUDA on/off)
+    if [[ "${1}" == "use_cuda" ]]; then
+        use_cuda="--use_cuda"
+        echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
+        echo "With CUDA:" | tee -a "${LOGFILE}"
+
+        # Loop over the Host devices
+        for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
+            gpu_index="${GPU_ARR[i]//[!0-9]/}"
+            echo -e "${WHITE}=== Devices: ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]} ===${NC}" &>> "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} --server_cuda="${gpu_index}" --client_cuda="${gpu_index}" "--unidir" &>> "${LOGFILE}" ; then
+                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}${NC}" | tee -a "${LOGFILE}"
+            fi
+            wrapper_results
+        done
+
+    else
+        if [ "${ONLY_CUDA}" = "true" ]; then
+            return
+        fi
+        use_cuda=""
+        echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
+        echo "Without CUDA:" | tee -a "${LOGFILE}"
+
+          # Loop over the Host devices
+        for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
+            echo -e "${WHITE}=== Device: ${SERVER_MLNX[i]} ===${NC}" &>> "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
+                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}"  | tee -a "${LOGFILE}"
+            fi
+            wrapper_results
+        done
+    fi
+}
+
+
+
 # Function to call the ngc_rdma_test.sh for each device on the host(s) - External loopback connectivity
 ngc_rdma_test_external_loopback() {
     local use_cuda
@@ -116,6 +232,9 @@ ngc_rdma_test_external_loopback() {
         echo "NGC RDMA Test (External Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:"
     else
+        if [ "${ONLY_CUDA}" = "true" ]; then
+            return
+        fi
         use_cuda=""
         echo "NGC RDMA Test (External Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
         echo "Without CUDA:"
@@ -146,6 +265,62 @@ ngc_rdma_test_external_loopback() {
 }
 
 
+# Determine nic <-> gpu affinity
+nic_to_gpu_affinity() {
+    # Display NIC & GPU affinity according to file
+    if [ -n "${AFFINITY_FILE}" ]; then
+        if [ -f "${AFFINITY_FILE}" ]; then
+            echo "NIC to GPU affinity according to ${AFFINITY_FILE} file:" | tee -a "${LOGFILE}"
+            GPU_LINE=$(grep -ni "gpu" "${AFFINITY_FILE}" | cut -d ':' -f1)
+            NIC_LINE=$(grep -ni "mlx" "${AFFINITY_FILE}" | cut -d ':' -f1)
+            if [[ -z $NIC_LINE || -z $GPU_LINE ]]; then
+                fatal "Error with file ${AFFINITY_FILE}"
+            fi
+            SERVER_MLNX=($(awk "NR==${NIC_LINE}" "${AFFINITY_FILE}"))
+            GPU_ARR=($(awk "NR==${GPU_LINE}" "${AFFINITY_FILE}"))
+            for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
+                echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}"
+            done
+        else
+            echo "Error with file ${AFFINITY_FILE}."
+            exit 1
+        fi
+    else
+        # Display default NIC & GPU affinity
+        # Find CUDA & RDMA devices
+        readarray -t GPU_ARR <<< "$(ssh "${SERVER_IP}" nvidia-smi -L | awk '{print $1 $2}' | tr -d ':')" ||
+        fatal "Couldn't get CUDA devices"
+        readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" ibdev2netdev  | awk '{print $1}')"  ||
+        fatal "Couldn't get NICs from ibdev2netdev"
+        echo "NIC to GPU affinity:" | tee -a "${LOGFILE}"
+        for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
+            echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}"
+        done
+    fi
+
+    # Ask the user to confirm
+    tries=0
+    while true; do
+        read -r -p "Is the affinity correct? [yY]/[nN]: " user_confirm
+        case "${user_confirm}" in
+        [yY])
+            break
+            ;;
+        [nN])
+            echo "Please provide affinity file (see README)"
+            exit 0
+            ;;
+        *)
+            tries=$(( tries + 1 ))
+            if (( tries == 3 )); then
+                fatal "Reached maximum attempts. Exiting.."
+            fi
+            ;;
+        esac
+    done
+}
+
+
 # Check for SSH connectivity
 check_ssh() {
     local failed_hosts=""
@@ -155,10 +330,9 @@ check_ssh() {
         fi
     done
     if [[ -n "${failed_hosts}" ]]; then
-        echo "SSH connection failed for:${failed_hosts}. Exiting.."
-        exit 1
+        fatal "SSH connection failed for:${failed_hosts}."
     else
-        echo "Created log file: ${LOGFILE}"
+        log "Created log file: ${LOGFILE}"
     fi
 }
 
@@ -166,10 +340,9 @@ check_ssh() {
 # If 1 host provided, run external loopback test:
 if [[ $# == 1 ]]; then
     check_ssh "${SERVER_IP}"
-    # Get MLNX devices (PCIe & RDMA):
-    ssh "${SERVER_IP}" sudo dmidecode -t 1 | grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
-    ssh "${SERVER_IP}" sudo dmidecode -t 0 | grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
-    readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" mst status -v  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
+    echo "=== Server: ${SERVER_IP} ===" > "${LOGFILE}"
+    ssh "${SERVER_IP}" sudo dmidecode -t 0,1 &>> "${LOGFILE}"
+
     # Without CUDA
     ngc_rdma_test_external_loopback
     # Use CUDA:
@@ -178,14 +351,38 @@ if [[ $# == 1 ]]; then
 # If 2 hosts provided (meaning b2b connectivity):
 elif [[ $# == 2 ]]; then
     check_ssh "${SERVER_IP}" "${CLIENT_IP}"
-    # Get MLNX devices (PCIe & RDMA):
-    ssh "${SERVER_IP}" sudo dmidecode -t 1 | grep -i serial | awk '{$1=$1};1' | grep -iv '^$' &>> "${LOGFILE}"
-    ssh "${SERVER_IP}" sudo dmidecode -t 0 | grep -i version | awk '{$1=$1};1' | sed 's/^/BIOS /' &>> "${LOGFILE}"
-    readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" "sudo mst status -v"  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)"
-    # Without CUDA
-    ngc_rdma_test
-    # Use CUDA
-    ngc_rdma_test "use_cuda"
+    echo "=== Server: ${SERVER_IP} ===" > "${LOGFILE}"
+    ssh "${SERVER_IP}" sudo dmidecode -t 0,1 &>> "${LOGFILE}"
+    echo "=== Client: ${CLIENT_IP} ===" >> "${LOGFILE}"
+    ssh "${CLIENT_IP}" sudo dmidecode -t 0,1 &>> "${LOGFILE}"
+
+    # Determine if running as VM
+    if [ "${RUN_AS_VM}" = "true" ]; then
+       # Check GPU affinity if cuda is required
+        if [ "${RUN_WITH_CUDA}" ]; then
+            nic_to_gpu_affinity
+        else
+            # Get MLNX devices
+            readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" ibdev2netdev | awk '{print $1}')" ||
+            fatal "Couldn't get NICs from ibdev2netdev"
+        fi
+        # VM b2b without CUDA
+        ngc_rdma_vm_test
+        # VM b2b with CUDA
+        if [ "${RUN_WITH_CUDA}" = "true" ]; then
+            ngc_rdma_vm_test "use_cuda"
+        fi
+    else
+        # Get MLNX devices (PCIe & RDMA):
+        readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" "sudo mst status -v"  | awk '/mlx/{print $3 " " $4}' | sort -t ' ' -k2,2V)" ||
+            fatal "Couldn't get NICs from mst status -v"
+        # b2b Without CUDA
+        ngc_rdma_test
+        # b2b With CUDA
+        if [ "${RUN_WITH_CUDA}" = "true" ]; then
+            ngc_rdma_test "use_cuda"
+        fi
+    fi
 else
     help
 fi
