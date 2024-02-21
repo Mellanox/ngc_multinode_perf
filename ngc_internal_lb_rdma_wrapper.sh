@@ -180,14 +180,16 @@ nic_to_gpu_affinity() {
             echo "NIC to GPU affinity according to ${AFFINITY_FILE} file:" | tee -a "${LOGFILE}"
             GPU_LINE=$(grep -ni "gpu" "${AFFINITY_FILE}" | cut -d ':' -f1)
             NIC_LINE=$(grep -ni "mlx" "${AFFINITY_FILE}" | cut -d ':' -f1)
+            if [[ -z "${NIC_LINE}" || -z "${GPU_LINE}" ]]; then
+                fatal "Error with file ${AFFINITY_FILE}"
+            fi
             SERVER_MLNX=($(awk "NR==${NIC_LINE}" "${AFFINITY_FILE}"))
             GPU_ARR=($(awk "NR==${GPU_LINE}" "${AFFINITY_FILE}"))
             for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
                 echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}"
             done
         else
-            echo "Error with file ${AFFINITY_FILE}."
-            exit 1
+            fatal "Error with file ${AFFINITY_FILE}."
         fi
     else
         # Display default NIC & GPU affinity
