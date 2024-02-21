@@ -17,6 +17,7 @@ while [ $# -gt 0 ]; do
         --aff)
             if [ -f "${2}" ]; then
                 AFFINITY_FILE="${2}"
+                RUN_AS_VM=true
                 shift 2
             else
                 fatal "--aff parameter requires a file"
