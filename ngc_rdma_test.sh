@@ -3,6 +3,7 @@
 
 set -eE
 
+NEIGHBOR_LEVELS=1 # Utilizing NIC's NUMA
 default_qps=4
 max_qps=64
 bw_ms_list=("65536")
