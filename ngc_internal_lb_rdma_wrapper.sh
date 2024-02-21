@@ -54,7 +54,7 @@ set -- "${POSITIONAL_ARGS[@]}"
 SERVER_IP=${1}
 
 
-# Check if --aff is provided without --with_one or --only_one
+# Check if --aff is provided without --with_cuda or --cuda_only
 if [ -n "${AFFINITY_FILE}" ] && [ -z "${RUN_WITH_CUDA}" ] && [ -z "${ONLY_CUDA}" ]; then
     fatal "If --aff is provided, either --with_cuda or --cuda_only must also be provided."
 fi
@@ -113,13 +113,11 @@ ngc_rdma_internal_lb() {
         echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:"
     else
-
         if [ "${ONLY_CUDA}" = "true" ]; then
             return
         fi
         use_cuda=""
         echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
-        echo -e "${WHITE}--- Results ---${NC}"
         echo "Without CUDA:"
     fi
 
@@ -143,7 +141,8 @@ ngc_rdma_vm_internal_lb() {
         use_cuda="--use_cuda"
         echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
         echo "With CUDA:" | tee -a "${LOGFILE}"
-          # Loop over the Host devices
+
+        # Loop over the Host devices
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
             gpu_index="${GPU_ARR[i]//[!0-9]/}"
             echo -e "${WHITE}=== Devices: ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]} ===${NC}" &>> "${LOGFILE}"
@@ -159,7 +158,6 @@ ngc_rdma_vm_internal_lb() {
         fi
         use_cuda=""
         echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
-        echo -e "${WHITE}--- Results ---${NC}" | tee -a "${LOGFILE}"
         echo "Without CUDA:" | tee -a "${LOGFILE}"
 
           # Loop over the Host devices
@@ -174,7 +172,7 @@ ngc_rdma_vm_internal_lb() {
 }
 
 
-# Determine nic <-> gpu affinity function
+# Determine nic <-> gpu affinity
 nic_to_gpu_affinity() {
     # Display NIC & GPU affinity according to file
     if [ -n "${AFFINITY_FILE}" ]; then
@@ -230,7 +228,7 @@ nic_to_gpu_affinity() {
 # Check for SSH connectivity
 check_ssh() {
     if ! ssh -q "${SERVER_IP}" exit; then
-        fatal "SSH connection failed for: ${SERVER_IP}. Exiting.."
+        fatal "SSH connection failed for: ${SERVER_IP}."
     fi
 }
 
@@ -242,27 +240,28 @@ if (( $# == 1 )); then
     echo "=== Server: ${SERVER_IP} ===" &>> "${LOGFILE}"
     log "Created log file: ${LOGFILE}"
 
-    # Determine if affinity file is provided
+    # Determine if running as VM
     if [ "${RUN_AS_VM}" = "true" ]; then
-        # Check GPU affinity
+        # Check GPU affinity if cuda is required
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
             nic_to_gpu_affinity
         else
             readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" ibdev2netdev | awk '{print $1}')" ||
                 fatal "Couldn't get NICs from ibdev2netdev"
         fi
-        # Loopback without CUDA
+        # VM Loopback without CUDA
         ngc_rdma_vm_internal_lb
-        # Loopback with CUDA
+        # VM Loopback with CUDA
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
             ngc_rdma_vm_internal_lb "use_cuda"
         fi
     else
-        # Loopback without CUDA
+        # Get MLNX devices
         readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" ibdev2netdev | awk '{print $1}')" ||
             fatal "Couldn't get NICs from ibdev2netdev"
+        # Without CUDA
         ngc_rdma_internal_lb
-        # Loopback test with CUDA
+        # With CUDA
         if [ "${RUN_WITH_CUDA}" = "true" ]; then
             ngc_rdma_internal_lb "use_cuda"
         fi
