@@ -185,7 +185,7 @@ ngc_rdma_test() {
 }
 
 
-# Internal loopback function for VMs
+# ngc_rdma_test with different affinity (for VMs mostly)
 ngc_rdma_vm_test() {
     local use_cuda
     # Determine the current test being run (CUDA on/off)
@@ -198,7 +198,7 @@ ngc_rdma_vm_test() {
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
             gpu_index="${GPU_ARR[i]//[!0-9]/}"
             echo -e "${WHITE}=== Devices: ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]} ===${NC}" &>> "${LOGFILE}"
-            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} --server_cuda="${gpu_index}" --client_cuda="${gpu_index}" "--unidir" &>> "${LOGFILE}" ; then
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${CLIENT_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} --server_cuda="${gpu_index}" --client_cuda="${gpu_index}" &>> "${LOGFILE}" ; then
                 echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}${NC}" | tee -a "${LOGFILE}"
             fi
             wrapper_results
@@ -215,7 +215,7 @@ ngc_rdma_vm_test() {
           # Loop over the Host devices
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
             echo -e "${WHITE}=== Device: ${SERVER_MLNX[i]} ===${NC}" &>> "${LOGFILE}"
-            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${CLIENT_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
                 echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}"  | tee -a "${LOGFILE}"
             fi
             wrapper_results
