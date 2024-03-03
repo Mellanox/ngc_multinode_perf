@@ -40,6 +40,10 @@ while [ $# -gt 0 ]; do
             tests="--tests=ib_read_bw"
             shift
             ;;
+        --pairs)
+            PAIRS_FILE="${2}"
+            shift 2
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -82,6 +86,11 @@ help() {
   echo "mlx5_0 mlx5_1 mlx5_2 mlx5_3 mlx5_4 mlx5_5 mlx5_6 mlx5_7" > gpuaff.txt
   echo "GPU6 GPU3 GPU1 GPU7 GPU4 GPU2 GPU0 GPU5" >> gpuaff.txt
 
+  * For External Loopback, you need to provide the pairs in a file.
+  Example:
+  echo "mlx5_0 mlx5_1 mlx5_2,mlx5_3 mlx5_4,mlx5_5 mlx5_6 mlx5_7 mlx5_8,mlx5_9 mlx5_10,mlx5_11" > pairs.txt
+  Coma separated devices are indication for dual port devices.
+
   Options:
   --vm        # Use this flag when running on a VM
   --aff       # Used with the --vm flag to provide a different NIC<->GPU affinity
@@ -89,13 +98,14 @@ help() {
   --read      # Run read tests only
   --with_cuda # Run both RDMA and GPUDirect
   --cuda_only # Run only GPUDirect
+  --pairs     # Pairs file used for External Loopback
 
   ${WHITE}Usage:
   RDMA & GPUDirect:
   $0 Server Client --with_cuda
 
   External Loopback connectivity (Without GPUDirect):
-  $0 Server${RESET}
+  $0 Server --pairs \$FILE
 
   Hosts with different NIC<->GPU affinity:
   $0 Server Client --vm --aff \$FILE --with_cuda${RESET}
@@ -214,19 +224,37 @@ ngc_rdma_vm_test() {
 }
 
 
-
 # Function to call the ngc_rdma_test.sh for each device on the host(s) - External loopback connectivity
 ngc_rdma_test_external_loopback() {
     local use_cuda
     # Define the pairs using regular arrays
-    pairs=(
-    "0,6"
-    "1,7"
-    "2,8"
-    "3,9"
-    "4,10"
-    "5,11"
-    )
+    elements=($(cat "${PAIRS_FILE}"))
+    # Ask the user to confirm
+    echo "== Interface Pairs: =="
+    for ((i = 0; i < ${#elements[@]}; i += 2)); do
+    echo "${elements[i]} <-> ${elements[i + 1]}"
+    done
+    # Ask the user to confirm
+    tries=0
+    while true; do
+        read -r -p "Are the pairs correct? [yY]/[nN]: " user_confirm
+        case "${user_confirm}" in
+        [yY])
+            break
+            ;;
+        [nN])
+            echo "Please provide the pairs in a file (see README)"
+            exit 0
+            ;;
+        *)
+            tries=$(( tries + 1 ))
+            if (( tries == 3 )); then
+                fatal "Reached maximum attempts. Exiting.."
+            fi
+            ;;
+        esac
+    done
+
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
         echo "NGC RDMA Test (External Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
@@ -240,25 +268,10 @@ ngc_rdma_test_external_loopback() {
         echo "Without CUDA:"
     fi
 
-    # Loop through pairs and send to ngc test
-    for pair in "${pairs[@]}"; do
-        # Seperate the pairs to first and second element
-        first="${pair%,*}"
-        second="${pair#*,}"
-        if [[ "$first" == "1" ]]; then
-            echo -e "${WHITE}Dual Port -  1st Card: mlx5_1, mlx5_2 | 2nd Card: mlx5_7, mlx5_8${NC}" &>> "${LOGFILE}"
-            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_1","mlx5_2" "${SERVER_IP}" "mlx5_7","mlx5_8" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
-                echo "${RED}Issue with device mlx5_1, mlx5_2 <-> mlx5_7, mlx5_8" | tee -a "${LOGFILE}${NC}"
-            fi
-        # Skip to avoid duplicates of the second port
-        elif [[ "$first" == "2" ]]; then
-            continue
-        # Single Ports
-        else
-            echo -e "${WHITE}Single Port - mlx5_${first} mlx5_${second}${NC}" &>> "${LOGFILE}"
-            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "mlx5_${first}" "${SERVER_IP}" "mlx5_${second}" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
-                echo "${RED}Issue with device mlx5_${first} <-> mlx5_${second}" | tee -a "${LOGFILE}${NC}"
-            fi
+    for ((i = 0; i < ${#elements[@]}; i += 2)); do
+        echo -e "${WHITE}=== Device: ${elements[i]} <-> ${elements[i + 1]} ===${NC}" &>> "${LOGFILE}"
+        if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${elements[i]}" "${SERVER_IP}" "${elements[i + 1]}" "${tests}" ${use_cuda} &>> "${LOGFILE}" ; then
+            echo -e "${RED}Issue with device ${elements[i]} <-> ${elements[i + 1]}${NC}"  | tee -a "${LOGFILE}"
         fi
         wrapper_results
     done
@@ -339,6 +352,12 @@ check_ssh() {
 
 # If 1 host provided, run external loopback test:
 if [[ $# == 1 ]]; then
+    if [ ! -f "${PAIRS_FILE}" ]; then
+        fatal "For External Loopback, please provide pairs file."
+    fi
+    { (( $(wc -l "${PAIRS_FILE}" | cut -d' ' -f1) == 1 )) &&
+        grep -q '^\(mlx5_[0-9]\+\(,mlx5_[0-9]\+\)\?\([[:space:]]\|$\)\)\+$' "${PAIRS_FILE}"
+    } || fatal "Verify that ${PAIRS_FILE} is formatted correctly."
     check_ssh "${SERVER_IP}"
     echo "=== Server: ${SERVER_IP} ===" > "${LOGFILE}"
     ssh "${SERVER_IP}" sudo dmidecode -t 0,1 &>> "${LOGFILE}"
@@ -346,7 +365,9 @@ if [[ $# == 1 ]]; then
     # Without CUDA
     ngc_rdma_test_external_loopback
     # Use CUDA:
-    ngc_rdma_test_external_loopback "use_cuda"
+    if [ "${RUN_WITH_CUDA}" = "true" ]; then
+        ngc_rdma_test_external_loopback "use_cuda"
+    fi
 
 # If 2 hosts provided (meaning b2b connectivity):
 elif [[ $# == 2 ]]; then
