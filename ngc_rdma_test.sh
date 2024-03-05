@@ -116,6 +116,7 @@ Options:
 	--tests=<list of ib perftests>: Use this flag to provide a comma-separated list of ib perftests to run.
 	--bw_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run bw tests (default: 65536)
 	--lat_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
+	--unidir: Run in unidir (default: bidir)
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
