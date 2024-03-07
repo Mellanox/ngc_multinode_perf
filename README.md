@@ -48,6 +48,34 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     * The nvidia-peermem driver should be loaded.
     * Perftest should be built with CUDA support.
 
+
+## RDMA Wrapper
+
+Automatically detect HCAs on the host(s) and run ngc_rdma_test.sh for
+each device.
+
+### Usage:
+
+```
+./ngc_rdma_wrapper.sh <client hostname/ip> <server hostname/ip> \
+    [--with_cuda, default: without cuda] \
+    [--cuda_only] \
+    [--write] \
+    [--read] \
+    [--vm] \
+    [--aff <file>] \
+    [--pairs <file>]
+
+./ngc_internal_lb_rdma_wrapper.sh <hostname/ip> \
+    [--with_cuda, default: without cuda] \
+    [--cuda_only] \
+    [--write] \ 
+    [--read] \
+    [--vm] \
+    [--aff <file>]
+```
+
+
 ## TCP test
 
 Will automatically detect device local NUMA node, disable IRQ balancer,
