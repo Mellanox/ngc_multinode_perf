@@ -14,6 +14,7 @@ conn_type_cmd=()
 #Defaults are not using cuda, set params as empty string
 server_cuda=""
 client_cuda=""
+ALLOW_CORE_ZERO=false
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"

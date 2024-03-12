@@ -607,7 +607,7 @@ normlize_core_lists() {
     s_offset=0
     e_offset=0
     HAS_CORE_ZERO=$(check_if_has_core_zero)
-    if [ "$HAS_CORE_ZERO" = "true" ] && [ "$ALLAOW_CORE_ZERO" = "false" ] && [ $max_usable_cores -gt 2 ]
+    if [ "$HAS_CORE_ZERO" = "true" ] && [ "$ALLOW_CORE_ZERO" = "false" ] && [ $max_usable_cores -gt 2 ]
     then
         s_offset=1
     fi
