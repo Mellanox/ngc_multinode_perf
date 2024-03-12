@@ -44,7 +44,7 @@ do
             shift
             ;;
         --allow_core_zero)
-            ALLAOW_CORE_ZERO=true
+            ALLOW_CORE_ZERO=true
             shift
             ;;
         --neighbor_levels=*)
@@ -75,7 +75,7 @@ IS_SERVER_SPR=false
 [ -n "${DISABLE_RO}" ] || DISABLE_RO=false
 [ -n "${TEST_DURATION}" ] || TEST_DURATION="120"
 [ -n "${MAX_PROC}" ] || MAX_PROC="32"
-[ -n "${ALLAOW_CORE_ZERO}" ] || ALLAOW_CORE_ZERO=false
+[ -n "${ALLOW_CORE_ZERO}" ] || ALLOW_CORE_ZERO=false
 [ -n "${NEIGHBOR_LEVELS}" ] || NEIGHBOR_LEVELS=1
 
 
