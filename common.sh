@@ -651,7 +651,7 @@ get_cores_for_devices(){
         NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$2"))
         read -ra SERVER_CORES <<< $(get_available_cores_per_device $SERVER_TRUSTED $5)
         server_core_per_device=$((${#SERVER_CORES[@]}))
-        NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$4"))
+        NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$4"))
         read -ra CLIENT_CORES <<< $(get_available_cores_per_device $CLIENT_TRUSTED $server_core_per_device)
         normlize_core_lists
     fi
