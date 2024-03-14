@@ -44,6 +44,10 @@ while [ $# -gt 0 ]; do
             PAIRS_FILE="${2}"
             shift 2
             ;;
+        -h|--help)
+            help
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;

@@ -40,6 +40,10 @@ while [ $# -gt 0 ]; do
             tests="--tests=ib_read_bw"
             shift
             ;;
+        -h|--help)
+            help
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
