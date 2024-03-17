@@ -243,13 +243,10 @@ for TEST in "${TESTS[@]}"; do
             run_perftest_servers
             sleep 2
             run_perftest_clients
-            if [ "${bw_test}" = "true" ]
-            then
-                [ "${CONN_TYPE}" = "default" ] &&
-                    logstring[1]="-" || logstring[1]="(connection type: ${CONN_TYPE})"
-                [ "${PASS}" = true ] && logstring[2]="Passed" || logstring[2]="Failed"
-                log "${logstring[*]}"
-            fi
+            [ "${CONN_TYPE}" = "default" ] &&
+                logstring[1]="-" || logstring[1]="(connection type: ${CONN_TYPE})"
+            [ "${PASS}" = true ] && logstring[2]="Passed" || logstring[2]="Failed"
+            log "${logstring[*]}"
         done
     done
 done

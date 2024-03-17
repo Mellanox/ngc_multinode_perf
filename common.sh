@@ -1021,6 +1021,21 @@ run_perftest_clients() {
             fi
             ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
         done
+    else
+        for ((dev_idx=0; dev_idx<NUM_DEVS; dev_idx++))
+        do
+            grep -q 'send\|write' <<<"${TEST}" && LAT_PASS_VAL='2.5'
+            grep -q 'read' <<<"${TEST}" && LAT_PASS_VAL='4.5'
+            LAT_VAL="$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/t_avg/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json | xargs")"
+            check_if_number "${LAT_VAL}" || PASS=false
+            log "Device ${CLIENT_DEVICES[dev_idx]} avg. latency: ${LAT_VAL} μs."
+            if awk "BEGIN {exit !(${LAT_VAL} > ${LAT_PASS_VAL})}"
+            then
+                log "Device ${CLIENT_DEVICES[dev_idx]} didn't achieve latengy of ${LAT_PASS_VAL} μs."
+                PASS=false
+            fi
+            ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
+        done
     fi
 
 }
