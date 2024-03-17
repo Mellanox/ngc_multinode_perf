@@ -228,7 +228,7 @@ for TEST in "${TESTS[@]}"; do
             fatal "${TEST} - test not supported."
             ;;
     esac
-     
+
     for CONN_TYPE in "${connection_types[@]}"
     do
         if [[ "${TEST}" == *_lat* ]]; then
