@@ -27,7 +27,7 @@ check_connection() {
 check_if_number(){
     local re num
     num=$1
-    re='^[0-9]+$'
+    re='^[0-9]+(\.[0-9]+)?$'
     [[ $num =~ $re ]] || return 1
 }
 
