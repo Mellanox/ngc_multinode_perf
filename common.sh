@@ -153,30 +153,32 @@ get_ips() {
     i=0
     for sdev in "${SERVER_DEVICES[@]}"
     do
-        if ! ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]} | grep -w '^[[:space:]]\+inet'")
+        if ! ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
         then
-            fatal "Interface ${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]} on ${SERVER_TRUSTED} seems not to have an IPv4."
+            fatal "Interface ${SERVER_NETDEVS[i]} on ${SERVER_TRUSTED} seems not to have an IPv4."
         fi
         SERVER_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
         SERVER_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${SERVER_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${SERVER_IPS[${#SERVER_IPS[@]}-1]}" ] &&
-            fatal "Can't find a server IP associated with the net device '${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}'." ||
-            log "INFO: Found $(awk -F',' '{print NF}' <<<"${SERVER_IPS[${#SERVER_IPS[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}'."
+            fatal "Can't find a server IP associated with the net device '${SERVER_NETDEVS[i]}'." ||
+            log "INFO: Found $(awk -F',' '{print NF}' <<<"${SERVER_IPS[${#SERVER_IPS[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEVS[i]}'."
         i=$((i+1))
     done
     CLIENT_IPS=()
     CLIENT_IPS_MASK=()
+    i=0
     for cdev in "${CLIENT_DEVICES[@]}"
     do
-        if ! ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]} | grep -w '^[[:space:]]\+inet'")
+        if ! ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
         then
-            fatal "Interface ${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]} on ${CLIENT_TRUSTED} seems not to have an IPv4."
+            fatal "Interface ${CLIENT_NETDEVS[i]} on ${CLIENT_TRUSTED} seems not to have an IPv4."
         fi
         CLIENT_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
         CLIENT_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${CLIENT_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}" ] &&
-            fatal "Can't find a client IP associated with the net device '${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}'." ||
-            log "INFO: Found $(awk -F',' '{print NF}' <<<"${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}'."
+            fatal "Can't find a client IP associated with the net device '${CLIENT_NETDEVS[i]}'." ||
+            log "INFO: Found $(awk -F',' '{print NF}' <<<"${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEVS[i]}'."
+        i=$((i+1))
     done
 }
 
