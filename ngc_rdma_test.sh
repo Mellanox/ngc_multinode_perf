@@ -11,6 +11,7 @@ lat_ms_list=("2")
 server_QPS=()
 client_QPS=()
 conn_type_cmd=()
+mtu_sizes=()
 #Defaults are not using cuda, set params as empty string
 server_cuda=""
 client_cuda=""
@@ -18,6 +19,7 @@ ALLOW_CORE_ZERO=false
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
+source "${scriptdir}/ipsec_full_offload_setup.sh"
 
 POSITIONAL_ARGS=()
 while [ $# -gt 0 ]
@@ -65,6 +67,10 @@ do
             RDMA_UNIDIR=true
             shift
             ;;
+        --ipsec)
+            IPSEC=true
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -105,7 +111,7 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>] [--message-size-list=<list of message sizes>]
+Syntax: $0 <client hostname> <client ib device1>[,client ib device2] <server hostname> <server ib device1>[,server ib device2] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>] [--message-size-list=<list of message sizes>] [--ipsec]
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
@@ -118,6 +124,7 @@ Options:
 	--bw_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run bw tests (default: 65536)
 	--lat_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
 	--unidir: Run in unidir (default: bidir)
+	--ipsec: Enable IPsec packet offload (full-offload) on the Arm cores.
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
@@ -129,7 +136,7 @@ $0 client mlx5_0 server mlx5_3 --conn=UC,UD,DC
 EOF
 }
 
-if (( $# != 4  ))
+if (( $# < 4  ))
 then
     show_help
     exit 1
@@ -139,6 +146,16 @@ CLIENT_TRUSTED="${1}"
 CLIENT_DEVICES=(${2//,/ })
 SERVER_TRUSTED="${3}"
 SERVER_DEVICES=(${4//,/ })
+
+[ -n "${IPSEC}" ] || IPSEC=false
+if [ "$IPSEC" = true ]
+then
+    LOCAL_BF=(${5//,/ })
+    LOCAL_BF_device=(${6//,/ })
+    REMOTE_BF=(${7//,/ })
+    REMOTE_BF_device=(${8//,/ })
+fi
+
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
 if [ -n "${user_qps}" ]; then
     (( user_qps <= max_qps )) || fatal "Max allowed QPs are ${max_qps}."
@@ -158,6 +175,7 @@ then
     fatal "The number of server and client devices must be equal."
 fi
 NUM_DEVS=${#SERVER_DEVICES[@]}
+NUM_BF_DEVS=${#LOCAL_BF[@]}
 
 #init the arrays SERVER_NETDEVS,CLIENT_NETDEVS
 get_netdevs
@@ -186,6 +204,47 @@ for CONN_TYPE in "${CONN_TYPES[@]}"; do
         exit 1
     fi
 done
+
+#---------------------Configure IPsec full offload--------------------
+if [ "$IPSEC" = true ]
+then
+
+    if [ -z "${MTU_SIZE}" ]; then
+        for dev in "${CLIENT_DEVICES[@]}"
+        do
+            echo "$dev"
+            net_name="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${dev}/device/net/ | head -1")"
+            mtu_sizes+=("$(ssh "${CLIENT_TRUSTED}" "ip a show ${net_name} | awk '/mtu/{print \$5}'")")
+            echo "$mtu_sizes"
+        done
+        MTU_SIZE="$(get_min_val ${mtu_sizes[@]})"
+    fi
+
+    index=0
+    for ((; index<NUM_BF_DEVS; index++))
+    do
+        # IPsec full-offload configuration flow:
+        get_ips_and_ifs # create SERVER_IPS, SERVER_IPS_MASK, CLIENT_IPS, CLIENT_IPS_MASK
+        update_mlnx_bf_conf ${LOCAL_BF[index]}
+        update_mlnx_bf_conf ${REMOTE_BF[index]}
+        generate_next_ip # Generate local_IP & remote_IP
+        set_mtu ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} $(( MTU_SIZE + 50 ))
+        set_ip ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} "${local_IP}/24" ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} "${remote_IP}/24"
+        in_key=$(generete_key)
+        out_key=$(generete_key)
+        in_reqid=$(generete_req)
+        out_reqid=$(generete_req)
+        set_representor ${LOCAL_BF_device[index]} ${REMOTE_BF_device[index]}
+        set_ipsec_rules ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} "${local_IP}" "${remote_IP}" ${in_key} ${out_key} ${in_reqid} ${out_reqid} "offload packet"
+        set_ipsec_rules ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} "${remote_IP}" "${local_IP}" ${out_key} ${in_key} ${out_reqid} ${in_reqid} "offload packet"
+        ovs_configure ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${representor1} "${local_IP}" "${remote_IP}" "${index}"
+        ovs_configure ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} ${representor2} "${remote_IP}" "${local_IP}" "${index}"
+    done
+    for ((index1=0; index1<NUM_DEVS; index1++))
+    do 
+        set_ip ${CLIENT_TRUSTED} ${CLIENT_NETDEVS[index1]} "${CLIENT_IPS[index1]}/${CLIENT_IPS_MASK[index1]}" ${SERVER_TRUSTED} ${SERVER_NETDEVS[index1]} "${SERVER_IPS[index1]}/${SERVER_IPS_MASK[index1]}"
+    done
+fi
 
 #---------------------Run Benchmark--------------------
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
@@ -250,3 +309,25 @@ for TEST in "${TESTS[@]}"; do
         done
     done
 done
+if [ "$IPSEC" = true ]
+then
+    index=0
+    for ((; index<NUM_BF_DEVS; index++))
+    do
+
+        # IPsec full-offload configuration *flush* flow:
+        set_representor ${LOCAL_BF_device[index]} ${REMOTE_BF_device[index]}
+        ovs_configure_revert ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${representor1} "${index}"
+        ovs_configure_revert ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} ${representor2} "${index}"
+        remove_ipsec_rules ${LOCAL_BF[index]}
+        remove_ipsec_rules ${REMOTE_BF[index]}
+        flush_ip ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${REMOTE_BF[index]} ${REMOTE_BF_device[index]}
+        set_mtu ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} ${MTU_SIZE}
+        update_mlnx_bf_conf_revert ${LOCAL_BF[index]}
+        update_mlnx_bf_conf_revert ${REMOTE_BF[index]}
+        for ((index1=0; index1<NUM_DEVS; index1++))
+        do 
+            set_ip ${CLIENT_TRUSTED} ${CLIENT_NETDEVS[index1]} "${CLIENT_IPS[index1]}/${CLIENT_IPS_MASK[index1]}" ${SERVER_TRUSTED} ${SERVER_NETDEVS[index1]} "${SERVER_IPS[index1]}/${SERVER_IPS_MASK[index1]}"
+        done
+    done
+fi

@@ -41,7 +41,8 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     [--lat_message_size_list=<list of message sizes>] \
     [--server_cuda=<cuda_device>] \
     [--client_cuda=<cuda_device>] \
-    [--unidir]
+    [--unidir] \ 
+    [--ipsec]
 ```
 
 * If running with CUDA:
