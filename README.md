@@ -42,7 +42,8 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     [--server_cuda=<cuda_device>] \
     [--client_cuda=<cuda_device>] \
     [--unidir] \ 
-    [--ipsec]
+    [--ipsec <list of DPU clients> <list of PFs associated to list of DPU clients> \
+    <list of DPU servers> <list of PFs associated to list of DPU servers>]
 ```
 
 * If running with CUDA:
