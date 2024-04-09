@@ -85,8 +85,8 @@ set_ipsec_rules() {
     local offload_type=$9
 
     ssh "${client}" "sudo ovs-appctl exit --cleanup"
-    ssh "${client}" "sudo /opt/mellanox/iproute2/sbin/ip xfrm state add src ${local_IP}/24 dst ${remote_IP}/24 proto esp spi ${out_reqid} reqid ${out_reqid} mode transport aead 'rfc4106(gcm(aes))' ${out_key} 128 ${offload_type} dev ${device} dir out sel src ${local_IP}/24 dst ${remote_IP}/24"
-    ssh "${client}" "sudo /opt/mellanox/iproute2/sbin/ip xfrm state add src ${remote_IP}/24 dst ${local_IP}/24 proto esp spi ${in_reqid} reqid ${in_reqid} mode transport aead 'rfc4106(gcm(aes))' ${in_key} 128 ${offload_type} dev ${device} dir in sel src ${remote_IP}/24 dst ${local_IP}/24"
+    ssh "${client}" "sudo /opt/mellanox/iproute2/sbin/ip xfrm state add src ${local_IP}/24 dst ${remote_IP}/24 proto esp spi ${out_reqid} reqid ${out_reqid} mode transport aead 'rfc4106(gcm(aes))' ${out_key} 128 ${offload_type} dev ${device} dir out sel src ${local_IP}/24 dst ${remote_IP}/24 flag esn replay-window 128"
+    ssh "${client}" "sudo /opt/mellanox/iproute2/sbin/ip xfrm state add src ${remote_IP}/24 dst ${local_IP}/24 proto esp spi ${in_reqid} reqid ${in_reqid} mode transport aead 'rfc4106(gcm(aes))' ${in_key} 128 ${offload_type} dev ${device} dir in sel src ${remote_IP}/24 dst ${local_IP}/24 flag esn replay-window 128"
     ssh "${client}" "sudo /opt/mellanox/iproute2/sbin/ip xfrm policy add src ${local_IP}/24 dst ${remote_IP}/24 ${offload_type} dev ${device} dir out tmpl src ${local_IP}/24 dst ${remote_IP}/24 proto esp reqid ${out_reqid} mode transport"
     ssh "${client}" "sudo /opt/mellanox/iproute2/sbin/ip xfrm policy add src ${remote_IP}/24 dst ${local_IP}/24 ${offload_type} dev ${device} dir in tmpl src ${remote_IP}/24 dst ${local_IP}/24 proto esp reqid ${in_reqid} mode transport"
 }
