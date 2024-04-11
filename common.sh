@@ -641,8 +641,10 @@ normlize_core_lists() {
 }
 
 get_cores_for_devices(){
-    local SERVER_TRUSTED=$1
-    local CLIENT_TRUSTED=$3
+    local CLIENT_TRUSTED="${1}"
+    local CLIENT_DEVICES=(${2})
+    local SERVER_TRUSTED="${3}"
+    local SERVER_DEVICES=(${4})
 
     if [ ${CLIENT_TRUSTED} = ${SERVER_TRUSTED} ]
     then
@@ -650,10 +652,10 @@ get_cores_for_devices(){
         NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$combindList"))
         get_available_cores_per_device $CLIENT_TRUSTED $5
     else
-        NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$2"))
+        NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$SERVER_DEVICES"))
         read -ra SERVER_CORES <<< $(get_available_cores_per_device $SERVER_TRUSTED $5)
         server_core_per_device=$((${#SERVER_CORES[@]}))
-        NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$4"))
+        NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$CLIENT_DEVICES"))
         read -ra CLIENT_CORES <<< $(get_available_cores_per_device $CLIENT_TRUSTED $server_core_per_device)
         normlize_core_lists
     fi
