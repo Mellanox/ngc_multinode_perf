@@ -8,6 +8,7 @@
 * sysstat
 * perftest version >= 4.5-0.11 (if running RDMA tests)
 * nvidia-utils (if running RDMA test with CUDA)
+* mlnx-tools (or at least the `common_irq_affinity.sh` and `set_irq_affinity_cpulist.sh` scripts from it). This package is available [here](https://github.com/Mellanox/mlnx-tools), and is also installed as a part of OFED.
 
 ## Access requirements
 
