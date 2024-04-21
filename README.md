@@ -93,6 +93,8 @@ aggregated throughput is in Gb/s.
     <server ib device> [--duplex=<"HALF" (default) or "FULL">] \
     [--change_mtu=<"CHANGE" (default) or "DONT_CHANGE">] \
     [--duration=<in seconds, default: 120>]
+    [--ipsec <list of DPU clients> <list of PFs associated to list of DPU clients> \
+    <list of DPU servers> <list of PFs associated to list of DPU servers>]
 ```
 
 ## IPsec full offload test

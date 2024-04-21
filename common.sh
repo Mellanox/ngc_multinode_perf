@@ -1070,6 +1070,7 @@ get_bandwidth_from_combined_files(){
 
 collect_BW() {
     totalBW=0
+    [ -n "${PASS_CRITERION}" ] || PASS_CRITERION=0.9
     local dev_idx=0
     failed_tcp_test=false
     for ((; dev_idx<NUM_DEVS; dev_idx++))
@@ -1077,7 +1078,7 @@ collect_BW() {
         prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
         dev_base_port=$((BASE_TCP_POTR + 10000*dev_idx))
         port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}")
-        passing_port_rate="$(awk "BEGIN {printf \"%.0f\n\", 0.9*${port_rate}}")"
+        passing_port_rate="$(awk "BEGIN {printf \"%.0f\n\", ${PASS_CRITERION}*${port_rate}}")"
         BW=$(get_bandwidth_from_combined_files ${CLIENT_TRUSTED} "CLIENT" "/tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}")
         S_BW=0
         pref=${GREEN}
@@ -1116,10 +1117,10 @@ collect_BW() {
         [[ "$IS_CLIENT_SPR" = "true" ]] && log "WARN: Client side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
         [[ "$IS_SERVER_SPR" = "true" ]] && log "WARN: Server side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
         echo -e "${RED}Failed - servers failed ngc_tcp_test with the given HCAs${NC}"
-        exit 1
+        return 1
     else
         echo -e "${GREEN}Passed - servers passed ngc_tcp_test with the given HCAs${NC}"
-        exit 0
+        return 0
     fi
 }
 print_stats(){
