@@ -15,10 +15,12 @@ if (($# < 4)); then
     echo "		                You will need to restart the driver and re run again"
     echo "		   allow_core_zero - allow binding process on core 0, default:false"
     echo "		   neighbor_levels - in case there is no enough cores on NIC numa, specify the number of closet neighbor numa to collect cores form it, default:2"
+    echo "		   --ipsec: Enable IPsec packet offload (full-offload) on the Arm cores."
     exit 1
 fi
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
+source "${scriptdir}/ipsec_full_offload_setup.sh"
 
 while [ $# -gt 0 ]
 do
@@ -49,6 +51,10 @@ do
             ;;
         --neighbor_levels=*)
             NEIGHBOR_LEVELS="${1#*=}"
+            shift
+            ;;
+        --ipsec)
+            IPSEC=true
             shift
             ;;
         --*)
@@ -105,6 +111,55 @@ esac
 
 #init the arrays SERVER_IPS,CLIENT_IPS,SERVER_NETDEVS,CLIENT_NETDEVS
 get_ips_and_ifs
+
+[ -n "${IPSEC}" ] || IPSEC=false
+if [ "$IPSEC" = true ]
+then
+    LOCAL_BF=(${5//,/ })
+    LOCAL_BF_device=(${6//,/ })
+    REMOTE_BF=(${7//,/ })
+    REMOTE_BF_device=(${8//,/ })
+    CHANGE_MTU=DONT_CHANGE
+    NUM_BF_DEVS=${#LOCAL_BF[@]}
+    PASS_CRITERION=0.85
+#---------------------Configure IPsec full offload--------------------
+    if [ -z "${MTU_SIZE}" ]; then
+        for dev in "${CLIENT_DEVICES[@]}"
+        do
+            echo "$dev"
+            net_name="$(ssh "${CLIENT_TRUSTED}" "ls -1 /sys/class/infiniband/${dev}/device/net/ | head -1")"
+            mtu_sizes+=("$(ssh "${CLIENT_TRUSTED}" "ip a show ${net_name} | awk '/mtu/{print \$5}'")")
+            echo "$mtu_sizes"
+        done
+        MTU_SIZE="$(get_min_val ${mtu_sizes[@]})"
+        echo "MTU_SIZE"
+        echo "$MTU_SIZE"
+    fi
+
+    index=0
+    for ((; index<NUM_BF_DEVS; index++))
+    do
+        # IPsec full-offload configuration flow:
+        update_mlnx_bf_conf ${LOCAL_BF[index]}
+        update_mlnx_bf_conf ${REMOTE_BF[index]}
+        generate_next_ip # Generate local_IP & remote_IP
+        set_mtu ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} $(( MTU_SIZE + 400 ))
+        set_ip ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} "${local_IP}/24" ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} "${remote_IP}/24"
+        in_key=$(generete_key)
+        out_key=$(generete_key)
+        in_reqid=$(generete_req)
+        out_reqid=$(generete_req)
+        set_representor ${LOCAL_BF_device[index]} ${REMOTE_BF_device[index]}
+        set_ipsec_rules ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} "${local_IP}" "${remote_IP}" ${in_key} ${out_key} ${in_reqid} ${out_reqid} "offload packet"
+        set_ipsec_rules ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} "${remote_IP}" "${local_IP}" ${out_key} ${in_key} ${out_reqid} ${in_reqid} "offload packet"
+        ovs_configure ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${representor1} "${local_IP}" "${remote_IP}" "${index}"
+        ovs_configure ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} ${representor2} "${remote_IP}" "${local_IP}" "${index}"
+    done
+    for ((index1=0; index1<NUM_DEVS; index1++))
+    do 
+        set_ip ${CLIENT_TRUSTED} ${CLIENT_NETDEVS[index1]} "${CLIENT_IPS[index1]}/${CLIENT_IPS_MASK[index1]}" ${SERVER_TRUSTED} ${SERVER_NETDEVS[index1]} "${SERVER_IPS[index1]}/${SERVER_IPS_MASK[index1]}"
+    done
+fi
 LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEVS[0]}/type")"
 [ $CHANGE_MTU = "CHANGE" ] && change_mtu
 min_l=$(get_min_channels)
@@ -156,3 +211,26 @@ print_stats $CLIENT_TRUSTED
 
 #Collect the output
 collect_BW
+#---------------------Revert IPsec full offload configuration--------------------
+if [ "$IPSEC" = true ]
+then
+    index=0
+    for ((; index<NUM_BF_DEVS; index++))
+    do
+
+        # IPsec full-offload configuration *flush* flow:
+        set_representor ${LOCAL_BF_device[index]} ${REMOTE_BF_device[index]}
+        ovs_configure_revert ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${representor1} "${index}"
+        ovs_configure_revert ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} ${representor2} "${index}"
+        remove_ipsec_rules ${LOCAL_BF[index]}
+        remove_ipsec_rules ${REMOTE_BF[index]}
+        flush_ip ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${REMOTE_BF[index]} ${REMOTE_BF_device[index]}
+        set_mtu ${LOCAL_BF[index]} ${LOCAL_BF_device[index]} ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} ${MTU_SIZE}
+        update_mlnx_bf_conf_revert ${LOCAL_BF[index]}
+        update_mlnx_bf_conf_revert ${REMOTE_BF[index]}
+        for ((index1=0; index1<NUM_DEVS; index1++))
+        do 
+            set_ip ${CLIENT_TRUSTED} ${CLIENT_NETDEVS[index1]} "${CLIENT_IPS[index1]}/${CLIENT_IPS_MASK[index1]}" ${SERVER_TRUSTED} ${SERVER_NETDEVS[index1]} "${SERVER_IPS[index1]}/${SERVER_IPS_MASK[index1]}"
+        done
+    done
+fi
