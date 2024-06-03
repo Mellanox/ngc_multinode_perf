@@ -11,11 +11,48 @@ RED='\033[1;31m'
 NC='\033[0m'
 
 log() {
-    >&2 printf "%s\n" "${*}"
+    local line prefix prio out color
+    line="${1}"
+    prefix="${2}"
+
+    [ -n "${prefix}" ] || prefix="INFO"
+    case "${prefix}" in
+        "INFO")
+            prio="info"
+            out="stderr"
+            ;;
+        "RESULT_PASS")
+            prio="info"
+            color="${GREEN}"
+            ;;
+        "RESULT_FAIL")
+            prio="info"
+            color="${RED}"
+            ;;
+        "ERROR")
+            prio="err"
+            out="stderr"
+            color="${RED}"
+            ;;
+        *)
+            prio="warning"
+            out="stderr"
+            color="${ORANGE}"
+            ;;
+    esac
+
+    if [ "${out}" = "stderr" ]
+    then
+        printf "${color}%s: %s${NC}\n" "${prefix}" "${line}" |
+            tee >(systemd-cat -t ngc_multinode_perf -p "${prio}") >&2
+    else
+        printf "${color}%s: %s${NC}\n" "${prefix}" "${line}" |
+            tee >(systemd-cat -t ngc_multinode_perf -p "${prio}")
+    fi
 }
 
 fatal() {
-    log "ERROR: ${*}"
+    log "${*}" ERROR
     exit 1
 }
 
@@ -161,7 +198,7 @@ get_ips() {
         SERVER_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${SERVER_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${SERVER_IPS[${#SERVER_IPS[@]}-1]}" ] &&
             fatal "Can't find a server IP associated with the net device '${SERVER_NETDEVS[i]}'." ||
-            log "INFO: Found $(awk -F',' '{print NF}' <<<"${SERVER_IPS[${#SERVER_IPS[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEVS[i]}'."
+            log "Found $(awk -F',' '{print NF}' <<<"${SERVER_IPS[${#SERVER_IPS[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEVS[i]}'."
         i=$((i+1))
     done
     CLIENT_IPS=()
@@ -177,7 +214,7 @@ get_ips() {
         CLIENT_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${CLIENT_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
         [ -z "${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}" ] &&
             fatal "Can't find a client IP associated with the net device '${CLIENT_NETDEVS[i]}'." ||
-            log "INFO: Found $(awk -F',' '{print NF}' <<<"${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEVS[i]}'."
+            log "Found $(awk -F',' '{print NF}' <<<"${CLIENT_IPS[${#CLIENT_IPS[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEVS[i]}'."
         i=$((i+1))
     done
 }
@@ -219,7 +256,7 @@ get_server_client_ips_and_ifs() {
                 CLIENT_IP+=("$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
                 [ -z "${CLIENT_IP[${#CLIENT_IP[@]}-1]}" ] &&
                     fatal "Can't find a client IP associated with the net device '${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}'." ||
-                    log "INFO: Found $(awk -F',' '{print NF}' <<<"${CLIENT_IP[${#CLIENT_IP[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}'."
+                    log "Found $(awk -F',' '{print NF}' <<<"${CLIENT_IP[${#CLIENT_IP[@]}-1]}") IPs associated with the client net device '${CLIENT_NETDEV[${#CLIENT_NETDEV[@]}-1]}'."
             done
             ;;
         *)
@@ -245,7 +282,7 @@ get_server_client_ips_and_ifs() {
                 SERVER_IP+=("$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
                 [ -z "${SERVER_IP[${#SERVER_IP[@]}-1]}" ] &&
                     fatal "Can't find a server IP associated with the net device '${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}'." ||
-                    log "INFO: Found $(awk -F',' '{print NF}' <<<"${SERVER_IP[${#SERVER_IP[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}'."
+                    log "Found $(awk -F',' '{print NF}' <<<"${SERVER_IP[${#SERVER_IP[@]}-1]}") IPs associated with the server net device '${SERVER_NETDEV[${#SERVER_NETDEV[@]}-1]}'."
             done
             ;;
         *)
@@ -559,7 +596,7 @@ get_available_cores_per_device(){
     done
     #reset i
     i=0
-    log "INFO: Each device can use up to $MAX_POSSIBLE_CORES_PER_DEVICE cores (may include core 0)"
+    log "Each device can use up to $MAX_POSSIBLE_CORES_PER_DEVICE cores (may include core 0)"
     local j
     for n in "${NUMA_NODES[@]}"
     do
@@ -695,7 +732,7 @@ disable_pci_RO() {
     if ! [ "${curr_val,,}" = "${update_val,,}" ]
     then
         ssh "${SERVER}" "sudo setpci -s ${pci} 68.b=$update_val"
-        log "WARN: PCIe ${pci} relaxed ordering was disabled - please restart driver"
+        log "PCIe ${pci} relaxed ordering was disabled - please restart driver" WARNING
         FORCE_EXIT=true
     fi
 }
@@ -720,7 +757,7 @@ enable_flow_stearing(){
 
     ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done" || :
     ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done" || :
-    log "INFO: done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
+    log "done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
     sleep 1
     for ((i=0; i < $NUM_INST; i++))
     do
@@ -803,8 +840,8 @@ tune_tcp() {
 
         ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
         ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
-        log "INFO: Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
-        log "INFO: Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
+        log "Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
+        log "Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
         #Enable aRFS
         if [ ${LINK_TYPE} -eq 1 ]; then
             enable_aRFS "${SERVER_TRUSTED}" "${server_netdev}"
@@ -830,7 +867,7 @@ run_iperf_servers() {
             prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
             cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
             ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} &> /dev/null" &
-            log "INFO: run iperf3 server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+            log "run iperf3 server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
         done
         #IF full duplex then create iperf3 servers on client side
         if [ "$DUPLEX"  = "true" ]
@@ -844,7 +881,7 @@ run_iperf_servers() {
                 prt=$((BASE_TCP_POTR + 1000 + 11000*dev_idx + i ))
                 cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
                 ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]} &> /dev/null " &
-                log "INFO: run iperf3 server on ${CLIENT_TRUSTED} core index=${index}: ${cmd_arr[*]}"
+                log "run iperf3 server on ${CLIENT_TRUSTED} core index=${index}: ${cmd_arr[*]}"
             done
         fi
     done
@@ -879,7 +916,7 @@ run_iperf_clients() {
                      "/tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
                      "&")
             echo "${cmd_arr[*]}" >> ${iperf_clients_to_run_client_side}
-            log "INFO: Run ${cmd_arr[*]}"
+            log "Run ${cmd_arr[*]}"
         done
         #If full duplex then create iperf3 clients on server side
         if [ "$DUPLEX"  = true ]
@@ -899,7 +936,7 @@ run_iperf_clients() {
                          "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
                          "&")
                 echo "${cmd_arr[*]}" >> ${iperf_clients_to_run_server_side}
-                log "INFO: Run on server side the iperf clients: ${cmd_arr[*]}"
+                log "Run on server side the iperf clients: ${cmd_arr[*]}"
             done
         fi
     done
@@ -912,7 +949,7 @@ run_iperf_clients() {
     fi
     #Run all iperf clients
     ssh ${CLIENT_TRUSTED} "bash ${iperf_clients_to_run_client_side}" &> /dev/null &
-    log "INFO: iperf3 clietns start to run, wait for ${TEST_DURATION}sec for the test to finish"
+    log "iperf3 clietns start to run, wait for ${TEST_DURATION}sec for the test to finish"
 }
 
 ports_device_identifier() {
@@ -970,7 +1007,7 @@ run_perftest_servers() {
                  "-s" "${message_size}" "-D" "30" "-p" "${prt}" "-F"
                  "${conn_type_cmd[*]}" "${extra_server_args_str}" "${server_cuda}")
         ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} >> /dev/null &" &
-        log "INFO: run ${TEST} server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+        log "run ${TEST} server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
     done
 }
 
@@ -1003,7 +1040,7 @@ run_perftest_clients() {
                  "--out_json_file=/tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
                  "&")
         ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]}" & declare ${bg_pid}=$!
-        log "INFO: run ${TEST} client on ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
+        log "run ${TEST} client on ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
     done
     for ((dev_idx=$NUM_DEVS-1; dev_idx>=0; dev_idx--)); do
         bg_pid="bg_pid_$dev_idx"
@@ -1069,6 +1106,8 @@ get_bandwidth_from_combined_files(){
 }
 
 collect_BW() {
+    local outstr
+
     totalBW=0
     [ -n "${PASS_CRITERION}" ] || PASS_CRITERION=0.9
     local dev_idx=0
@@ -1081,27 +1120,29 @@ collect_BW() {
         passing_port_rate="$(awk "BEGIN {printf \"%.0f\n\", ${PASS_CRITERION}*${port_rate}}")"
         BW=$(get_bandwidth_from_combined_files ${CLIENT_TRUSTED} "CLIENT" "/tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}")
         S_BW=0
-        pref=${GREEN}
-        suffix="${NC} - linerate ${port_rate}Gb/s"
+        suffix=" - linerate ${port_rate}Gb/s"
         if [ "$DUPLEX"  = false ]
         then
+            outstr="Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} ->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s${suffix}"
             if [ $(echo "$BW < ${passing_port_rate}" | bc) -ne 0 ]
             then
-                pref=${RED}
-		failed_tcp_test=true
+                failed_tcp_test=true
+                log "${outstr}" RESULT_FAIL
+            else
+                log "${outstr}" RESULT_PASS
             fi
-            echo -e "${pref}Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} ->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s${suffix}"
         else
             dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
             S_BW=$(get_bandwidth_from_combined_files ${SERVER_TRUSTED} "SERVER" "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}")
+            outstr="Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} <->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s <-> ${S_BW}Gb/s${suffix}"
             if [ $(echo "$BW < ${passing_port_rate}" | bc) -ne 0 ] || [ $(echo "$S_BW < ${passing_port_rate}" | bc) -ne 0 ]
             then
-                pref=${RED}
-                suffix="${NC} - linerate ${port_rate}Gb/s"
                 failed_tcp_test=true
+                log "${outstr}" RESULT_FAIL
+            else
+                log "${outstr}" RESULT_PASS
             fi
             #echo "Server side(act as client for full duplex ) ${SERVER_DEVICES[dev_idx]} report throughput of ${S_BW}Gb/s"
-            echo -e "${pref}Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} <->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s <-> ${S_BW}Gb/s${suffix}"
             dupBW=$(echo "$S_BW + $BW" | bc)
             echo "Full duplex: ${dupBW}Gb/s"
             totalBW=$(echo "$totalBW + $dupBW" | bc)
@@ -1114,12 +1155,12 @@ collect_BW() {
 
     if [ $failed_tcp_test = "true" ]
     then
-        [[ "$IS_CLIENT_SPR" = "true" ]] && log "WARN: Client side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
-        [[ "$IS_SERVER_SPR" = "true" ]] && log "WARN: Server side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro"
-        echo -e "${RED}Failed - servers failed ngc_tcp_test with the given HCAs${NC}"
+        [[ "$IS_CLIENT_SPR" = "true" ]] && log "Client side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro" WARNING
+        [[ "$IS_SERVER_SPR" = "true" ]] && log "Server side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro" WARNING
+        log "Failed - servers failed ngc_tcp_test with the given HCAs" RESULT_FAIL
         return 1
     else
-        echo -e "${GREEN}Passed - servers passed ngc_tcp_test with the given HCAs${NC}"
+        log "Passed - servers passed ngc_tcp_test with the given HCAs" RESULT_PASS
         return 0
     fi
 }
@@ -1138,9 +1179,9 @@ wrapper_results() {
     # Read the file from the last-read line
     awk "NR >= ${start_line}" "${LOGFILE}"| while IFS= read -r line; do
         if [[ $line == *"Passed"* ]]; then
-            echo -e "${GREEN}$line${NC}"
+            log "${line}" RESULT_PASS
         elif [[ $line == *"Failed for"* ]]; then
-            echo -e "${RED}$line${NC}"
+            log "${line}" RESULT_FAIL
         fi
     done
     # Save the next line number to the variable
