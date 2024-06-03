@@ -304,8 +304,14 @@ for TEST in "${TESTS[@]}"; do
             run_perftest_clients
             [ "${CONN_TYPE}" = "default" ] &&
                 logstring[1]="-" || logstring[1]="(connection type: ${CONN_TYPE})"
-            [ "${PASS}" = true ] && logstring[2]="Passed" || logstring[2]="Failed"
-            log "${logstring[*]}"
+            if [ "${PASS}" = true ]
+            then
+                logstring[2]="Passed"
+                log "${logstring[*]}" RESULT_PASS
+            else
+                logstring[2]="Failed"
+                log "${logstring[*]}" RESULT_FAIL
+            fi
         done
     done
 done

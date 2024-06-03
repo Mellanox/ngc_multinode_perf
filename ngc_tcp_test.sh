@@ -90,7 +90,7 @@ SERVER_CORE_USAGES_FILE="/tmp/ngc_server_core_usages.log"
 
 if [ "$DISABLE_RO" = true ]
 then
-    echo -e "${ORANGE}WARN: apply WA for Sapphire system - please apply the following tuning in BIOS - Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled instead of using this WA${NC}"
+    log "Apply WA for Sapphire system - please apply the following tuning in BIOS - Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled instead of using this WA" WARNING
     sleep 2
 fi
 
@@ -169,16 +169,16 @@ opt_proc=$((min_l<MAX_PROC ? min_l : MAX_PROC))
 read -ra CORES_ARRAY <<< $(get_cores_for_devices $1 $2 $3 $4 $((opt_proc+2)))
 #NUM_CORES_PER_DEVICE will be the actual cores that need to be used
 NUM_CORES_PER_DEVICE=$(( ${#CORES_ARRAY[@]}/(${#CLIENT_DEVICES[@]}*2) ))
-log "INFO: Number of cores per device to be used is $NUM_CORES_PER_DEVICE, if duplex then half of them will act as servers and half as clients."
+log "Number of cores per device to be used is $NUM_CORES_PER_DEVICE, if duplex then half of them will act as servers and half as clients."
 
 log "${CORES_ARRAY[*]}"
 
 if [ "$DUPLEX" = true ]
 then
-    log "INFO: Running Full duplex."
+    log "Running Full duplex."
     NUM_INST=$((NUM_CORES_PER_DEVICE/2))
 else
-    log "INFO: Running half duplex."
+    log "Running half duplex."
     NUM_INST=${NUM_CORES_PER_DEVICE}
 fi
 
