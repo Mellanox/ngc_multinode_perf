@@ -236,8 +236,7 @@ ngc_rdma_test_external_loopback() {
             break
             ;;
         [nN])
-            echo "Please provide the pairs in a file (see README)"
-            exit 0
+            fatal "Please provide the pairs in a file (see README)"
             ;;
         *)
             tries=$(( tries + 1 ))
@@ -284,8 +283,7 @@ nic_to_gpu_affinity() {
                 echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}"
             done
         else
-            echo "Error with file ${AFFINITY_FILE}."
-            exit 1
+            fatal "Error with file ${AFFINITY_FILE}."
         fi
     else
         # Display default NIC & GPU affinity
@@ -309,8 +307,7 @@ nic_to_gpu_affinity() {
             break
             ;;
         [nN])
-            echo "Please provide affinity file (see README)"
-            exit 0
+            fatal "Please provide affinity file (see README)"
             ;;
         *)
             tries=$(( tries + 1 ))

@@ -207,8 +207,7 @@ nic_to_gpu_affinity() {
             break
             ;;
         [nN])
-            echo "Please provide affinity file (see README)"
-            exit 0
+            fatal "Please provide affinity file (see README)"
             ;;
         *)
             tries=$(( tries + 1 ))
