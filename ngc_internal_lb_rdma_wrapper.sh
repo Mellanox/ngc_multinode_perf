@@ -3,8 +3,8 @@ set -eE
 
 # Variables
 scriptdir="$(dirname "$0")"
-LOGFILE="/tmp/ngc-internal-loopback-test_$(date +%H:%M:%S__%d-%m-%Y).log"
 tests="--tests=ib_write_bw,ib_read_bw,ib_send_bw"
+CURRENT_DATE=$(date +'%F %H:%M:%S')
 source "${scriptdir}/common.sh"
 
 # Parse command line options
@@ -70,7 +70,7 @@ help() {
     RESET=$(tput sgr0)
     cat <<EOF >&2
   Internal Loopback wrapper for ngc_rdma_test.sh.
-  A Logfile is created under /tmp/.
+  For debugging, you can see results and other information using: journalctl --since "${CURRENT_DATE}" -t ngc_multinode_perf.
   RDMA devices are obtained from 'ibdev2netdev' command.
   Criteria for Pass/Fail - 90% line rate of the port speed.
 
@@ -114,25 +114,20 @@ ngc_rdma_internal_lb() {
     # Determine the current test being run (CUDA on/off)
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
-        echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
-        echo "With CUDA:"
+        log "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)"
     else
         if [ "${ONLY_CUDA}" = "true" ]; then
             return
         fi
         use_cuda=""
-        echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
-        echo "Without CUDA:"
+        log "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)"
     fi
 
      # Loop over the Host devices
     for i in "${SERVER_MLNX[@]}"; do
-        # Store the current element's value in a variable
-        echo -e "${WHITE}=== Device: ${i} ===${NC}" &>> "${LOGFILE}"
-        if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${i}" "${SERVER_IP}" "${i}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
-            echo "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}" | tee -a "${LOGFILE}"
+        if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${i}" "${SERVER_IP}" "${i}" "${tests}" ${use_cuda} "--unidir" 2> /dev/null | sed -n '/RESULT_\(PASS\|FAIL\):/p' ; then
+            log "Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}" WARNING
         fi
-        wrapper_results
     done
 }
 
@@ -143,17 +138,14 @@ ngc_rdma_vm_internal_lb() {
     # Determine the current test being run (CUDA on/off)
     if [[ "${1}" == "use_cuda" ]]; then
         use_cuda="--use_cuda"
-        echo -e "\nNGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)" | tee -a "${LOGFILE}"
-        echo "With CUDA:" | tee -a "${LOGFILE}"
+        log "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA on)"
 
         # Loop over the Host devices
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
             gpu_index="${GPU_ARR[i]//[!0-9]/}"
-            echo -e "${WHITE}=== Devices: ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]} ===${NC}" &>> "${LOGFILE}"
-            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} --server_cuda="${gpu_index}" --client_cuda="${gpu_index}" "--unidir" &>> "${LOGFILE}" ; then
-                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}${NC}" | tee -a "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} --server_cuda="${gpu_index}" --client_cuda="${gpu_index}" "--unidir" 2> /dev/null | sed -n '/RESULT_\(PASS\|FAIL\):/p' ; then
+                log "Issue with device ${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}${NC}" WARNING
             fi
-            wrapper_results
         done
 
     else
@@ -161,16 +153,14 @@ ngc_rdma_vm_internal_lb() {
             return
         fi
         use_cuda=""
-        echo "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)" | tee -a "${LOGFILE}"
-        echo "Without CUDA:" | tee -a "${LOGFILE}"
+        log "NGC BW RDMA Test (Internal Loopback) in progress... (CUDA off)"
+        log "Without CUDA:"
 
           # Loop over the Host devices
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
-            echo -e "${WHITE}=== Device: ${SERVER_MLNX[i]} ===${NC}" &>> "${LOGFILE}"
-            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} "--unidir" &>> "${LOGFILE}" ; then
-                echo -e "${RED}Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}"  | tee -a "${LOGFILE}"
+            if ! "${scriptdir}/ngc_rdma_test.sh" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${SERVER_IP}" "${SERVER_MLNX[i]}" "${tests}" ${use_cuda} "--unidir" 2> /dev/null | sed -n '/RESULT_\(PASS\|FAIL\):/p' ; then
+                log "Issue with device ${SERVER_MLNX[i]} <-> ${SERVER_MLNX[i]}${NC}" WARNING
             fi
-            wrapper_results
         done
     fi
 }
@@ -181,7 +171,7 @@ nic_to_gpu_affinity() {
     # Display NIC & GPU affinity according to file
     if [ -n "${AFFINITY_FILE}" ]; then
         if [ -f "${AFFINITY_FILE}" ]; then
-            echo "NIC to GPU affinity according to ${AFFINITY_FILE} file:" | tee -a "${LOGFILE}"
+            echo "NIC to GPU affinity according to ${AFFINITY_FILE} file:"
             GPU_LINE=$(grep -ni "gpu" "${AFFINITY_FILE}" | cut -d ':' -f1)
             NIC_LINE=$(grep -ni "mlx" "${AFFINITY_FILE}" | cut -d ':' -f1)
             if [[ -z "${NIC_LINE}" || -z "${GPU_LINE}" ]]; then
@@ -190,7 +180,7 @@ nic_to_gpu_affinity() {
             SERVER_MLNX=($(awk "NR==${NIC_LINE}" "${AFFINITY_FILE}"))
             GPU_ARR=($(awk "NR==${GPU_LINE}" "${AFFINITY_FILE}"))
             for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
-                echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}"
+                echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}"
             done
         else
             fatal "Error with file ${AFFINITY_FILE}."
@@ -202,9 +192,9 @@ nic_to_gpu_affinity() {
         fatal "Couldn't get CUDA devices"
         readarray -t SERVER_MLNX <<< "$(ssh "${SERVER_IP}" ibdev2netdev  | awk '{print $1}')"  ||
         fatal "Couldn't get NICs from ibdev2netdev"
-        echo "NIC to GPU affinity:" | tee -a "${LOGFILE}"
+        echo "NIC to GPU affinity:"
         for ((i=0; i<${#SERVER_MLNX[@]}; i++)); do
-            echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}" | tee -a "${LOGFILE}"
+            echo "${SERVER_MLNX[i]} <-> ${GPU_ARR[i]}"
         done
     fi
 
@@ -241,10 +231,7 @@ check_ssh() {
 
 if (( $# == 1 )); then
     check_ssh "${SERVER_IP}"
-    # Get device's BIOS info
-    ssh "${SERVER_IP}" sudo dmidecode -t 0,1 &> "${LOGFILE}"
-    echo "=== Server: ${SERVER_IP} ===" &>> "${LOGFILE}"
-    log "Created log file: ${LOGFILE}"
+    log "For debugging, please use: journalctl --since \"${CURRENT_DATE}\" -t ngc_multinode_perf"
 
     # Determine if running as VM
     if [ "${RUN_AS_VM}" = "true" ]; then
