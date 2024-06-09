@@ -1173,17 +1173,3 @@ print_stats(){
     total_active_avarage=`get_average ${usages[@]}`
     paste <(echo "${server}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
 }
-
-wrapper_results() {
-    start_line=${start_line:-0}
-    # Read the file from the last-read line
-    awk "NR >= ${start_line}" "${LOGFILE}"| while IFS= read -r line; do
-        if [[ $line == *"Passed"* ]]; then
-            log "${line}" RESULT_PASS
-        elif [[ $line == *"Failed for"* ]]; then
-            log "${line}" RESULT_FAIL
-        fi
-    done
-    # Save the next line number to the variable
-    start_line=$(($(wc -l < "${LOGFILE}") + 1))
-}
