@@ -192,7 +192,7 @@ get_ips() {
     do
         if ! ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
         then
-            fatal "Interface ${SERVER_NETDEVS[i]} on ${SERVER_TRUSTED} seems not to have an IPv4."
+            fatal "Interface ${SERVER_NETDEVS[i]} on ${SERVER_TRUSTED#*@} seems not to have an IPv4."
         fi
         SERVER_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
         SERVER_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${SERVER_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
@@ -208,7 +208,7 @@ get_ips() {
     do
         if ! ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
         then
-            fatal "Interface ${CLIENT_NETDEVS[i]} on ${CLIENT_TRUSTED} seems not to have an IPv4."
+            fatal "Interface ${CLIENT_NETDEVS[i]} on ${CLIENT_TRUSTED#*@} seems not to have an IPv4."
         fi
         CLIENT_IPS+=("$( echo "$ip_str" | grep -ioP '(?<=inet )\d+\.\d+\.\d+\.\d+' | xargs | tr ' ' ',')")
         CLIENT_IPS_MASK+=("$( echo "$ip_str" | grep -ioP "(?<=${CLIENT_IPS[i]}/)\d+" | xargs | tr ' ' ',')")
@@ -311,9 +311,9 @@ prep_for_tune_and_iperf_test() {
                        "'/node [0-9]+ size:/{print \$4}'" "|"
                        "grep" "-q" "'^0$'" )
     ! ssh "${CLIENT_TRUSTED}" "${find_empty_numas[*]}" ||
-        fatal "${CLIENT_TRUSTED} has empty NUMAs - please verify your BIOS/SMT settings."
+        fatal "${CLIENT_TRUSTED#*@} has empty NUMAs - please verify your BIOS/SMT settings."
     ! ssh "${SERVER_TRUSTED}" "${find_empty_numas[*]}" ||
-        fatal "${SERVER_TRUSTED} has empty NUMAs - please verify your BIOS/SMT settings."
+        fatal "${SERVER_TRUSTED#*@} has empty NUMAs - please verify your BIOS/SMT settings."
 
     CLIENT_NUMA_NODE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/infiniband/${CLIENT_DEVICE}/device/numa_node")"
     ((CLIENT_NUMA_NODE != -1)) || CLIENT_NUMA_NODE="0"
@@ -421,16 +421,16 @@ run_iperf3() {
 
     BITS=$(ssh "${CLIENT_TRUSTED}" "jq -s '[.[].end.sum_sent.bits_per_second] | add' <\"${RESULT_FILE}\"")
 
-    log "${CLIENT_TRUSTED} Active cores: ${CLIENT_ACTIVE_CORES_LIST_STRING}"
-    log "Active core usages on ${CLIENT_TRUSTED}"
+    log "${CLIENT_TRUSTED#*@} Active cores: ${CLIENT_ACTIVE_CORES_LIST_STRING}"
+    log "Active core usages on ${CLIENT_TRUSTED#*@}"
     ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | sed 's/|/ /' | awk '{print $2 "\t" $5}' >&2
     USAGES=($(ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | tail -n +2 | sed 's/|/ /' | awk '{print $5}'))
     TOTAL_ACTIVE_AVERAGE=$(get_average ${USAGES[@]})
     >&2 printf "Overall Active: %s\tOverall All cores: %s\n" "${TOTAL_ACTIVE_AVERAGE}" \
         "$(ssh "${CLIENT_TRUSTED}" "cat ${CLIENT_CORE_USAGES_FILE}$$" | grep all | sed 's/|/ /' | awk '{print $5}')"
 
-    log "${SERVER_TRUSTED} Active cores: ${SERVER_ACTIVE_CORES_LIST_STRING}"
-    log "Active core usages on ${SERVER_TRUSTED}"
+    log "${SERVER_TRUSTED#*@} Active cores: ${SERVER_ACTIVE_CORES_LIST_STRING}"
+    log "Active core usages on ${SERVER_TRUSTED#*@}"
     ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | sed 's/|/ /' | awk '{print $2 "\t" $5}' >&2
     USAGES=($(ssh "${SERVER_TRUSTED}" "cat ${SERVER_CORE_USAGES_FILE}$$" | tail -n +2 | sed 's/|/ /' | awk '{print $5}'))
     TOTAL_ACTIVE_AVERAGE=$(get_average ${USAGES[@]})
@@ -683,7 +683,7 @@ get_cores_for_devices(){
     local SERVER_TRUSTED="${3}"
     local SERVER_DEVICES=(${4})
 
-    if [ ${CLIENT_TRUSTED} = ${SERVER_TRUSTED} ]
+    if [ ${CLIENT_TRUSTED#*@} = ${SERVER_TRUSTED#*@} ]
     then
         combindList="${2},${4}"
         NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$combindList"))
@@ -763,22 +763,22 @@ enable_flow_stearing(){
     do
         cmd_arr=("ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "dst-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
         ssh "${SERVER_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
-        log "flow starting ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+        log "flow starting ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
         if [ "$DUPLEX"  = true ]
         then
             cmd_arr=("ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
             ssh "${SERVER_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
-            log "flow starting ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+            log "flow starting ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
             cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "dst-port" "$((11000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
             ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
-            log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
+            log "flow starting ${CLIENT_TRUSTED#*@}: ${cmd_arr[*]}"
             cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((11000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
             ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
-            log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
+            log "flow starting ${CLIENT_TRUSTED#*@}: ${cmd_arr[*]}"
         else
             cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
             ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
-            log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
+            log "flow starting ${CLIENT_TRUSTED#*@}: ${cmd_arr[*]}"
         fi
 
     done
@@ -867,7 +867,7 @@ run_iperf_servers() {
             prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
             cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
             ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} &> /dev/null" &
-            log "run iperf3 server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+            log "run iperf3 server on ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
         done
         #IF full duplex then create iperf3 servers on client side
         if [ "$DUPLEX"  = "true" ]
@@ -881,7 +881,7 @@ run_iperf_servers() {
                 prt=$((BASE_TCP_POTR + 1000 + 11000*dev_idx + i ))
                 cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
                 ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]} &> /dev/null " &
-                log "run iperf3 server on ${CLIENT_TRUSTED} core index=${index}: ${cmd_arr[*]}"
+                log "run iperf3 server on ${CLIENT_TRUSTED#*@} core index=${index}: ${cmd_arr[*]}"
             done
         fi
     done
@@ -1007,7 +1007,7 @@ run_perftest_servers() {
                  "-s" "${message_size}" "-D" "30" "-p" "${prt}" "-F"
                  "${conn_type_cmd[*]}" "${extra_server_args_str}" "${server_cuda}")
         ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} >> /dev/null &" &
-        log "run ${TEST} server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
+        log "run ${TEST} server on ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
     done
 }
 
@@ -1034,13 +1034,13 @@ run_perftest_clients() {
         ip_i=${SERVER_IPS[dev_idx]}
         extra_client_args_str="${extra_client_args[*]//%%QPS%%/${client_QPS[dev_idx]}}"
         cmd_arr=("sudo" "taskset" "-c" "${core}" "${TEST}" "-d" "${CLIENT_DEVICES[dev_idx]}"
-                 "-D" "30" "${SERVER_TRUSTED}" "-s" "${message_size}" "-p" "${prt}"
+                 "-D" "30" "${SERVER_TRUSTED#*@}" "-s" "${message_size}" "-p" "${prt}"
                  "-F" "${conn_type_cmd[*]}" "${extra_client_args_str}"
                  "${client_cuda}" "--out_json"
                  "--out_json_file=/tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
                  "&")
         ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]}" & declare ${bg_pid}=$!
-        log "run ${TEST} client on ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
+        log "run ${TEST} client on ${CLIENT_TRUSTED#*@}: ${cmd_arr[*]}"
     done
     for ((dev_idx=$NUM_DEVS-1; dev_idx>=0; dev_idx--)); do
         bg_pid="bg_pid_$dev_idx"
@@ -1123,7 +1123,7 @@ collect_BW() {
         suffix=" - linerate ${port_rate}Gb/s"
         if [ "$DUPLEX"  = false ]
         then
-            outstr="Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} ->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s${suffix}"
+            outstr="Throughput ${CLIENT_TRUSTED#*@}:${CLIENT_DEVICES[dev_idx]} ->  ${SERVER_TRUSTED#*@}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s${suffix}"
             if [ $(echo "$BW < ${passing_port_rate}" | bc) -ne 0 ]
             then
                 failed_tcp_test=true
@@ -1134,7 +1134,7 @@ collect_BW() {
         else
             dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
             S_BW=$(get_bandwidth_from_combined_files ${SERVER_TRUSTED} "SERVER" "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}")
-            outstr="Throughput ${CLIENT_TRUSTED}:${CLIENT_DEVICES[dev_idx]} <->  ${SERVER_TRUSTED}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s <-> ${S_BW}Gb/s${suffix}"
+            outstr="Throughput ${CLIENT_TRUSTED#*@}:${CLIENT_DEVICES[dev_idx]} <->  ${SERVER_TRUSTED#*@}:${SERVER_DEVICES[dev_idx]} :  ${BW}Gb/s <-> ${S_BW}Gb/s${suffix}"
             if [ $(echo "$BW < ${passing_port_rate}" | bc) -ne 0 ] || [ $(echo "$S_BW < ${passing_port_rate}" | bc) -ne 0 ]
             then
                 failed_tcp_test=true
@@ -1167,9 +1167,9 @@ collect_BW() {
 print_stats(){
     server=$1
     file="/tmp/ngc_tcp_core_usages_${TIME_STAMP}.txt"
-    log "Server:$server"
+    log "Server: ${server#*@}"
     ssh "${server}" "awk '{print \$2 \"\t\" \$5}' $file"
     usages=( $(ssh "${server}" "awk 'NR>1 {print \$5}' $file") )
     total_active_avarage=`get_average ${usages[@]}`
-    paste <(echo "${server}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
+    paste <(echo "${server#*@}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
 }
