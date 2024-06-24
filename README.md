@@ -114,7 +114,7 @@ Will configure IPsec full offload on both client and server DPU, and then run a 
 
 ## IPsec crypto offload test
 
-* Relevant for new HCAs (ConnectX-6 DX and above). 
+* Relevant for new HCAs (ConnectX-6 DX and above).
 
 Will configure IPsec crypto offload on both client and server, run TCP test,
 and remove IPsec configuration.

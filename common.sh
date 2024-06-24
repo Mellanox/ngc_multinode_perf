@@ -510,7 +510,7 @@ get_numa_nodes_array() {
     for dev in "${RDMA_DEVICES[@]}"
     do
         if ssh ${IP} "test -e /sys/class/infiniband/${dev}/device/numa_node"; then
-            NUMA_NODE=`ssh ${IP} cat /sys/class/infiniband/${dev}/device/numa_node`
+            NUMA_NODE=$(ssh ${IP} cat /sys/class/infiniband/${dev}/device/numa_node)
             if [[ $NUMA_NODE == "-1" ]]; then
                 NUMA_NODE="0"
             fi
@@ -860,7 +860,7 @@ run_iperf_servers() {
     for ((; dev_idx<NUM_DEVS; dev_idx++))
     do
         local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE ))
-        for i in `seq 0 $((NUM_INST-1))`; do
+        for i in $(seq 0 $((NUM_INST-1))); do
             sleep 0.1
             index=$((i+OFFSET_S))
             core="${CORES_ARRAY[index]}"
@@ -873,7 +873,7 @@ run_iperf_servers() {
         if [ "$DUPLEX"  = "true" ]
         then
             local OFFSET_C=$((dev_idx*NUM_CORES_PER_DEVICE+ NUM_DEVS*NUM_CORES_PER_DEVICE))
-            for i in `seq 0 $((NUM_INST-1))`
+            for i in $(seq 0 $((NUM_INST-1)))
             do
                 sleep 0.1
                 index=$(( i+OFFSET_C ))
@@ -903,7 +903,7 @@ run_iperf_clients() {
     for ((; dev_idx<NUM_DEVS; dev_idx++))
     do
         local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE + NUM_DEVS*NUM_CORES_PER_DEVICE + DUPLEX_OFFSET))
-        for i in `seq 0 $((NUM_INST-1))`; do
+        for i in $(seq 0 $((NUM_INST-1))); do
             sleep 0.1
             index=$((i+OFFSET_S))
             core="${CORES_ARRAY[index]}"
@@ -922,7 +922,7 @@ run_iperf_clients() {
         if [ "$DUPLEX"  = true ]
         then
             local OFFSET_C=$((dev_idx*NUM_CORES_PER_DEVICE+ DUPLEX_OFFSET))
-            for i in `seq 0 $((NUM_INST-1))`
+            for i in $(seq 0 $((NUM_INST-1)))
             do
                 sleep 0.1
                 index=$(( i+OFFSET_C ))
@@ -1098,10 +1098,10 @@ get_bandwidth_from_combined_files(){
     local file_prefix=$3
     local out="/tmp/iperf3_${tag}_${TIME_STAMP}.log"
     ssh ${S} "cat ${file_prefix}*" > ${out}
-    throughput_bits=`cat ${out} | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } '`
+    throughput_bits=$(cat ${out} | grep sum_sent -A7 | grep bits_per_second | tr "," " " | awk '{ SUM+=$NF } END { print SUM } ')
     #convert to bytes
-    BITS=`printf '%.0f' $throughput_bits`
-    throughput_Gbytes=`bc -l <<< "scale=2; $BITS/1000000000"`
+    BITS=$(printf '%.0f' $throughput_bits)
+    throughput_Gbytes=$(bc -l <<< "scale=2; $BITS/1000000000")
     echo ${throughput_Gbytes}
 }
 
@@ -1164,12 +1164,13 @@ collect_BW() {
         return 0
     fi
 }
+
 print_stats(){
     server=$1
     file="/tmp/ngc_tcp_core_usages_${TIME_STAMP}.txt"
     log "Server: ${server#*@}"
     ssh "${server}" "awk '{print \$2 \"\t\" \$5}' $file"
     usages=( $(ssh "${server}" "awk 'NR>1 {print \$5}' $file") )
-    total_active_avarage=`get_average ${usages[@]}`
+    total_active_avarage=$(get_average ${usages[@]})
     paste <(echo "${server#*@}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
 }

@@ -241,7 +241,7 @@ then
         ovs_configure ${REMOTE_BF[index]} ${REMOTE_BF_device[index]} ${representor2} "${remote_IP}" "${local_IP}" "${index}"
     done
     for ((index1=0; index1<NUM_DEVS; index1++))
-    do 
+    do
         set_ip ${CLIENT_TRUSTED} ${CLIENT_NETDEVS[index1]} "${CLIENT_IPS[index1]}/${CLIENT_IPS_MASK[index1]}" ${SERVER_TRUSTED} ${SERVER_NETDEVS[index1]} "${SERVER_IPS[index1]}/${SERVER_IPS_MASK[index1]}"
     done
 fi
@@ -332,7 +332,7 @@ then
         update_mlnx_bf_conf_revert ${LOCAL_BF[index]}
         update_mlnx_bf_conf_revert ${REMOTE_BF[index]}
         for ((index1=0; index1<NUM_DEVS; index1++))
-        do 
+        do
             set_ip ${CLIENT_TRUSTED} ${CLIENT_NETDEVS[index1]} "${CLIENT_IPS[index1]}/${CLIENT_IPS_MASK[index1]}" ${SERVER_TRUSTED} ${SERVER_NETDEVS[index1]} "${SERVER_IPS[index1]}/${SERVER_IPS_MASK[index1]}"
         done
     done
