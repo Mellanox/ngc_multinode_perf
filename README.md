@@ -34,8 +34,8 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
 ### Usage:
 
 ```
-./ngc_rdma_test.sh <client hostname/ip> <client ib device>[,<client ib device2>] \
-    <server hostname/ip> <server ib device>[,<server ib device2>] [--use_cuda] \
+./ngc_rdma_test.sh [<client username>@]<client hostname/ip> <client ib device>[,<client ib device2>] \
+    [<server username>@]<server hostname/ip> <server ib device>[,<server ib device2>] [--use_cuda] \
     [--qp=<num of QPs, default: total 4>] \
     [--all_connection_types | --conn=<list of connection types>] \
     [--tests=<list of ib perftests>] \
@@ -61,7 +61,7 @@ each device.
 ### Usage:
 
 ```
-./ngc_rdma_wrapper.sh <client hostname/ip> <server hostname/ip> \
+./ngc_rdma_wrapper.sh [<client username>@]<client hostname/ip> [<server username>@]<server hostname/ip> \
     [--with_cuda, default: without cuda] \
     [--cuda_only] \
     [--write] \
@@ -89,7 +89,7 @@ aggregated throughput is in Gb/s.
 ### Usage:
 
 ```
-./ngc_tcp_test.sh <client hostname/ip> <client ib device> <server hostname/ip> \
+./ngc_tcp_test.sh [<client username>@]<client hostname/ip> <client ib device> [<server username>@]<server hostname/ip> \
     <server ib device> [--duplex=<"HALF" (default) or "FULL">] \
     [--change_mtu=<"CHANGE" (default) or "DONT_CHANGE">] \
     [--duration=<in seconds, default: 120>]
@@ -106,8 +106,8 @@ Will configure IPsec full offload on both client and server DPU, and then run a 
 ### Usage:
 
 ```
-./ngc_ipsec_full_offload_tcp_test.sh <client hostname/ip> <client ib device> \
-    <server hostname/ip> <server ib device> <client bluefield hostname/ip> \
+./ngc_ipsec_full_offload_tcp_test.sh [<client username>@]<client hostname/ip> <client ib device> \
+    [<server username>@]<server hostname/ip> <server ib device> <client bluefield hostname/ip> \
     <server bluefield hostname/ip> [--mtu=<mtu size>] \
     [--duration=<in seconds, default: 120>]
 ```
@@ -122,8 +122,8 @@ and remove IPsec configuration.
 ### Usage:
 
 ```
-./ngc_ipsec_crypto_offload_tcp_test.sh <client hostname/ip> <client ib device> \
-    <server hostname/ip> <server ib device> <number of tunnels>
+./ngc_ipsec_crypto_offload_tcp_test.sh [<client username>@]<client hostname/ip> <client ib device> \
+    [<server username>@]<server hostname/ip> <server ib device> <number of tunnels>
 ```
 
 * The number of tunnels should not exceed the number of IPs configured on the NICs.

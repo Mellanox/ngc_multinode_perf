@@ -6,7 +6,7 @@ set -eE
 trap 'printf "Error in function %s, on line %d.\n" "${FUNCNAME[1]}" "${BASH_LINENO[0]}"' ERR
 
 if (($# < 4)); then
-    echo "usage: $0 <client trusted ip> <client ib device>[,client ib device2] <server trusted ip> <server ib device>[,server ib device2] [--duplex=<'HALF','FULL'>] [--change_mtu=<'CHANGE','DONT_CHANGE'>] [--duration=<sec>] [--max_proc=<number>]"
+    echo "usage: $0 [<client username>@]<client trusted ip> <client ib device>[,client ib device2] [<server username>@]<server trusted ip> <server ib device>[,server ib device2] [--duplex=<'HALF','FULL'>] [--change_mtu=<'CHANGE','DONT_CHANGE'>] [--duration=<sec>] [--max_proc=<number>]"
     echo "		   duplex - options: HALF,FULL, default: HALF"
     echo "		   change_mtu - options: CHANGE,DONT_CHANGE, default: CHANGE"
     echo "		   duration - time in seconds, default: 120"

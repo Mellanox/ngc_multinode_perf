@@ -3,7 +3,7 @@
 # Owner: dorko@nvidia.com
 
 if (( $# != 5 )); then
-    echo "usage: $0 <client trusted ip> <client ib device> <server trusted ip> <server ib device> <number of tunnels>"
+    echo "usage: $0 [<client username>@]<client trusted ip> <client ib device> [<server username>@]<server trusted ip> <server ib device> <number of tunnels>"
     exit 1
 fi
 
