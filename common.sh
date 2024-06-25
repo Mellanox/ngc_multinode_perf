@@ -685,7 +685,7 @@ get_cores_for_devices(){
 
     if [ ${CLIENT_TRUSTED} = ${SERVER_TRUSTED} ]
     then
-        combindList="${2},${4}"
+        combindList="${4},${2}"
         NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$combindList"))
         get_available_cores_per_device $CLIENT_TRUSTED $5
     else
