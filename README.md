@@ -34,8 +34,10 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
 ### Usage:
 
 ```
-./ngc_rdma_test.sh [<client username>@]<client hostname/ip> <client ib device>[,<client ib device2>] \
-    [<server username>@]<server hostname/ip> <server ib device>[,<server ib device2>] [--use_cuda] \
+./ngc_rdma_test.sh \
+    [<client username>@]<client hostname/ip> <client ib device>[,<client ib device2>,...] \
+    [<server username>@]<server hostname/ip> <server ib device>[,<server ib device2>,...] \
+    [--use_cuda] \
     [--qp=<num of QPs, default: total 4>] \
     [--all_connection_types | --conn=<list of connection types>] \
     [--tests=<list of ib perftests>] \
@@ -89,8 +91,10 @@ aggregated throughput is in Gb/s.
 ### Usage:
 
 ```
-./ngc_tcp_test.sh [<client username>@]<client hostname/ip> <client ib device> [<server username>@]<server hostname/ip> \
-    <server ib device> [--duplex=<"HALF" (default) or "FULL">] \
+./ngc_tcp_test.sh \
+    [<client username>@]<client hostname/ip> <client ib device1>[,<client ib device2>,...] \
+    [<server username>@]<server hostname/ip> <server ib device1>[,<server ib device2>,...] \
+    [--duplex=<"HALF" (default) or "FULL">] \
     [--change_mtu=<"CHANGE" (default) or "DONT_CHANGE">] \
     [--duration=<in seconds, default: 120>]
     [--ipsec <list of DPU clients> <list of PFs associated to list of DPU clients> \
