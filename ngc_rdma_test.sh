@@ -67,6 +67,10 @@ do
             RDMA_UNIDIR=true
             shift
             ;;
+        --sd)
+            SD=true
+            shift
+            ;;
         --ipsec)
             IPSEC=true
             shift
@@ -111,7 +115,7 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>] [--message-size-list=<list of message sizes>] [--ipsec]
+Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd]
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
@@ -125,6 +129,7 @@ Options:
 	--lat_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
 	--unidir: Run in unidir (default: bidir)
 	--ipsec: Enable IPsec packet offload (full-offload) on the Arm cores.
+	--sd: Enable Socket Direct support. The SD should be added after the device (see example below).
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
@@ -132,6 +137,8 @@ Example:(Run on 2 ports)
 $0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
 Example:(Pick 3 connection types, single port)
 $0 client mlx5_0 server mlx5_3 --conn=UC,UD,DC
+Example: (Run on 2 ports with Socket Direct)
+$0 client mlx5_0,mlx5_1,mlx5_4,mlx5_5 server mlx5_0,mlx5_1,mlx5_4,mlx5_5 --sd
 
 EOF
 }
