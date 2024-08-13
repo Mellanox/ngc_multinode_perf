@@ -1052,6 +1052,20 @@ run_perftest_clients() {
         do
             port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}")
             BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", ${multiplier}*0.9*${port_rate}}")"
+            # Check if the device is using Socket Direct
+            if [ "${SD}" = true ]; then
+                if (( ${#CLIENT_DEVICES[@]} % 2 == 0 )); then
+                    halfway=$((${#CLIENT_DEVICES[@]} / 2))
+                    MLNX_DEVICES=(${CLIENT_DEVICES[@]:0:halfway})
+                    SD_DEVICES=(${CLIENT_DEVICES[@]:halfway})
+                fi
+                if [[ "${dev_idx}" -ge "${halfway}" ]]; then
+                    break
+                else
+                    sd_func
+                    continue
+                fi
+            fi
             BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
             check_if_number "${BW}" || PASS=false
             log "Device ${CLIENT_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * multiplier)) Gb/s)"
@@ -1173,4 +1187,16 @@ print_stats(){
     usages=( $(ssh "${server}" "awk 'NR>1 {print \$5}' $file") )
     total_active_avarage=$(get_average ${usages[@]})
     paste <(echo "${server#*@}: Overall Active: $total_active_avarage") <(echo "Overall All cores: ") <(ssh ${server} "awk 'NR==2 {print \$5}' ${file}")
+}
+
+sd_func(){
+    BW1=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${MLNX_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
+    BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${SD_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
+    BW=$((BW1 + BW2))
+    log "Device ${MLNX_DEVICES[dev_idx]} & ${SD_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * multiplier)) Gb/s)"
+    if [[ ${BW} -lt ${BW_PASS_RATE} ]]; then
+            log "Device ${MLNX_DEVICES[dev_idx]} & ${SD_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
+            PASS=false
+    fi
+    ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${MLNX_DEVICES[dev_idx]}.json /tmp/perftest_${SD_DEVICES[dev_idx]}.json"
 }
