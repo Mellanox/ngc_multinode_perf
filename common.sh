@@ -1037,7 +1037,7 @@ run_perftest_clients() {
                  "-D" "30" "${SERVER_TRUSTED#*@}" "-s" "${message_size}" "-p" "${prt}"
                  "-F" "${conn_type_cmd[*]}" "${extra_client_args_str}"
                  "${client_cuda}" "--out_json"
-                 "--out_json_file=/tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
+                 "--out_json_file=/tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json"
                  "&")
         ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]}" & declare ${bg_pid}=$!
         log "run ${TEST} client on ${CLIENT_TRUSTED#*@}: ${cmd_arr[*]}"
@@ -1074,7 +1074,6 @@ run_perftest_clients() {
                 log "Device ${CLIENT_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
                 PASS=false
             fi
-            ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
         done
     else
         for ((dev_idx=0; dev_idx<NUM_DEVS; dev_idx++))
@@ -1089,10 +1088,8 @@ run_perftest_clients() {
                 log "Device ${CLIENT_DEVICES[dev_idx]} didn't achieve latengy of ${LAT_PASS_VAL} μs."
                 PASS=false
             fi
-            ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json"
         done
     fi
-
 }
 
 collect_stats(){
@@ -1198,5 +1195,4 @@ sd_func(){
             log "Device ${MLNX_DEVICES[dev_idx]} & ${SD_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
             PASS=false
     fi
-    ssh "${CLIENT_TRUSTED}" "sudo rm -f /tmp/perftest_${MLNX_DEVICES[dev_idx]}.json /tmp/perftest_${SD_DEVICES[dev_idx]}.json"
 }
