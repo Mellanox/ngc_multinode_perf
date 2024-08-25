@@ -1066,7 +1066,7 @@ run_perftest_clients() {
                     continue
                 fi
             fi
-            BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
+            BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
             check_if_number "${BW}" || PASS=false
             log "Device ${CLIENT_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * multiplier)) Gb/s)"
             if [[ ${BW} -lt ${BW_PASS_RATE} ]]
@@ -1080,7 +1080,7 @@ run_perftest_clients() {
         do
             grep -q 'send\|write' <<<"${TEST}" && LAT_PASS_VAL='2.5'
             grep -q 'read' <<<"${TEST}" && LAT_PASS_VAL='4.5'
-            LAT_VAL="$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/t_avg/{print \$2}' /tmp/perftest_${CLIENT_DEVICES[dev_idx]}.json | xargs")"
+            LAT_VAL="$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/t_avg/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json | xargs")"
             check_if_number "${LAT_VAL}" || PASS=false
             log "Device ${CLIENT_DEVICES[dev_idx]} avg. latency: ${LAT_VAL} μs."
             if awk "BEGIN {exit !(${LAT_VAL} > ${LAT_PASS_VAL})}"
