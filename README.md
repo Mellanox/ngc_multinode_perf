@@ -41,6 +41,7 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     [--qp=<num of QPs, default: total 4>] \
     [--all_connection_types | --conn=<list of connection types>] \
     [--tests=<list of ib perftests>] \
+    [--duration=<time in seconds, default: 30 per test>]\
     [--bw_message_size_list=<list of message sizes>] \
     [--lat_message_size_list=<list of message sizes>] \
     [--server_cuda=<cuda_device>] \

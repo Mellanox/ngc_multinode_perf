@@ -1004,7 +1004,7 @@ run_perftest_servers() {
             fi
         extra_server_args_str="${extra_server_args[*]//%%QPS%%/${server_QPS[dev_idx]}}"
         cmd_arr=("sudo" "taskset" "-c" "${core}" "${TEST}" "-d" "${SERVER_DEVICES[dev_idx]}"
-                 "-s" "${message_size}" "-D" "30" "-p" "${prt}" "-F"
+                 "-s" "${message_size}" "-D" "${TEST_DURATION}" "-p" "${prt}" "-F"
                  "${conn_type_cmd[*]}" "${extra_server_args_str}" "${server_cuda}")
         ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} >> /dev/null &" &
         log "run ${TEST} server on ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
@@ -1034,7 +1034,7 @@ run_perftest_clients() {
         ip_i=${SERVER_IPS[dev_idx]}
         extra_client_args_str="${extra_client_args[*]//%%QPS%%/${client_QPS[dev_idx]}}"
         cmd_arr=("sudo" "taskset" "-c" "${core}" "${TEST}" "-d" "${CLIENT_DEVICES[dev_idx]}"
-                 "-D" "30" "${SERVER_TRUSTED#*@}" "-s" "${message_size}" "-p" "${prt}"
+                 "-D" "${TEST_DURATION}" "${SERVER_TRUSTED#*@}" "-s" "${message_size}" "-p" "${prt}"
                  "-F" "${conn_type_cmd[*]}" "${extra_client_args_str}"
                  "${client_cuda}" "--out_json"
                  "--out_json_file=/tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json"
