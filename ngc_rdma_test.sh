@@ -71,6 +71,10 @@ do
             SD=true
             shift
             ;;
+        --duration=*)
+            TEST_DURATION="${1#*=}"
+            shift
+            ;;
         --ipsec)
             IPSEC=true
             shift
@@ -115,7 +119,7 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [ --tests=<list of ib perftests>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd]
+Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [--tests=<list of ib perftests>] [--duration=<time in seconds>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd]
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
@@ -125,6 +129,7 @@ Options:
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
 	--tests=<list of ib perftests>: Use this flag to provide a comma-separated list of ib perftests to run.
+	--duration=<time in seconds>: Specify the duration for each test (default: 30 seconds)
 	--bw_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run bw tests (default: 65536)
 	--lat_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
 	--unidir: Run in unidir (default: bidir)
@@ -162,6 +167,8 @@ then
     REMOTE_BF=(${7//,/ })
     REMOTE_BF_device=(${8//,/ })
 fi
+
+[ -n "${TEST_DURATION}" ] || TEST_DURATION="30"
 
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
 if [ -n "${user_qps}" ]; then
