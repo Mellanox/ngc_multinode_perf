@@ -163,4 +163,4 @@ curl -Lfs https://raw.githubusercontent.com/Mellanox/ngc_multinode_perf/main/hel
 | **Intel CPUs: Xeon Gold and Platinum**  |                                |
 | BIOS Settings                           | Out of the box                 |
 | Boot grub settings                      | `intel_idle.max_cstate=0 processor.max_cstate=0 intel_pstate=disable` |
-| NIC PCIe settings                       | For each NIC PCIe function:<br>Change PCI MaxReadReq to 4096B<br>Run `setpci -s $PCI_FUNCTION 68.w`, it will return 4 digits ABCD<br>→ Run `setpci -s $PCI_FUNCTION 68.w=5BCD` |
+| NIC PCIe settings                       | For each NIC PCIe function:<br>Change PCI MaxReadReq to 4096B<br>Run `setpci -s $PCI_FUNCTION CAP_EXP+8.w`, it will return 4 digits ABCD<br>→ Run `setpci -s $PCI_FUNCTION CAP_EXP+8.w=5BCD` |
