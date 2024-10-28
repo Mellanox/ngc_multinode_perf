@@ -69,16 +69,17 @@ check_if_number(){
 }
 
 change_local_mtu() {
-    local ibdev netdev mtu dev
+    local ibdev netdev mtu dev ns_prefix
 
     ibdev="${1}"
     netdev="${2}"
     mtu="${3}"
+    ns_prefix=""${@:4}""
 
-    echo "${mtu}" > "/sys/class/net/${netdev}/mtu"
-    for dev in "/sys/class/infiniband/${ibdev}/device/net/"*
+    echo "${mtu}" > "${ns_prefix}/sys/class/net/${netdev}/mtu"
+    for dev in "${ns_prefix} /sys/class/infiniband/${ibdev}/device/net/*"
     do
-        echo "${mtu}" > "/sys/class/net/${dev##*/}/mtu"
+        echo "${mtu}" > "${ns_prefix}/sys/class/net/${dev##*/}/mtu"
     done
 }
 
@@ -88,13 +89,16 @@ change_mtu() {
     elif [ "${LINK_TYPE}" -eq 32 ]; then
         MTU=4092
     fi
+    num_devs=${#SERVER_DEVICES[@]}
     for i in "${!CLIENT_NETDEVS[@]}"
     do
-        ssh "${CLIENT_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${CLIENT_DEVICES[i]} ${CLIENT_NETDEVS[i]} ${MTU}'"
-        ssh "${SERVER_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${SERVER_DEVICES[i]} ${SERVER_NETDEVS[i]} ${MTU}'"
-        CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEVS[i]}/mtu")"
+        server_ns_prefix=$(get_command_prefix ${i})
+        client_ns_prefix=$(get_command_prefix $((i+num_devs)))
+        ssh "${CLIENT_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${CLIENT_DEVICES[i]} ${CLIENT_NETDEVS[i]} ${MTU} ${client_ns_prefix} " " '"
+        ssh "${SERVER_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${SERVER_DEVICES[i]} ${SERVER_NETDEVS[i]} ${MTU} ${server_ns_prefix}'"
+        CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "${client_ns_prefix} cat /sys/class/net/${CLIENT_NETDEVS[i]}/mtu")"
         ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Client'
-        CURR_MTU="$(ssh "${SERVER_TRUSTED}" "cat /sys/class/net/${SERVER_NETDEVS[i]}/mtu")"
+        CURR_MTU="$(ssh "${SERVER_TRUSTED}" " ${server_ns_prefix} cat /sys/class/net/${SERVER_NETDEVS[i]}/mtu")"
         ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Server'
     done
 }
@@ -170,16 +174,22 @@ get_netdevs() {
     i=0
     for sdev in "${SERVER_DEVICES[@]}"
     do
-        SERVER_NETDEVS+=("$(ssh "${SERVER_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${sdev}")")
+        prefix=$(get_command_prefix ${i})
+        SERVER_NETDEVS+=("$(ssh "${SERVER_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${sdev} "${prefix}" ")")
         [ -n "${SERVER_NETDEVS[${#SERVER_NETDEVS[@]}-1]}" ] ||
             fatal "Can't find a server net device associated with the IB device '${sdev}'."
+        i=$((i+1))
     done
     CLIENT_NETDEVS=()
+    #Initialize i to first index of client namespaces
+    i=${#SERVER_DEVICES[@]}
     for cdev in "${CLIENT_DEVICES[@]}"
     do
-        CLIENT_NETDEVS+=("$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${cdev}")")
+        prefix=$(get_command_prefix ${i})
+        CLIENT_NETDEVS+=("$(ssh "${CLIENT_TRUSTED}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${cdev} "${prefix}" ")")
         [ -n "${CLIENT_NETDEVS[${#CLIENT_NETDEVS[@]}-1]}" ] ||
             fatal "Can't find a client net device associated with the IB device '${cdev}'."
+        i=$((i+1))
     done
 }
 
@@ -190,7 +200,8 @@ get_ips() {
     i=0
     for sdev in "${SERVER_DEVICES[@]}"
     do
-        if ! ip_str=$(ssh "${SERVER_TRUSTED}" "ip a sh ${SERVER_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
+        prefix=$(get_command_prefix ${i})
+        if ! ip_str=$(ssh "${SERVER_TRUSTED}" "${prefix}ip a sh ${SERVER_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
         then
             fatal "Interface ${SERVER_NETDEVS[i]} on ${SERVER_TRUSTED} seems not to have an IPv4."
         fi
@@ -204,9 +215,11 @@ get_ips() {
     CLIENT_IPS=()
     CLIENT_IPS_MASK=()
     i=0
+    ns_i_offset=${#SERVER_DEVICES[@]}
     for cdev in "${CLIENT_DEVICES[@]}"
     do
-        if ! ip_str=$(ssh "${CLIENT_TRUSTED}" "ip a sh ${CLIENT_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
+        prefix=$(get_command_prefix $((i+ns_i_offset)))
+        if ! ip_str=$(ssh "${CLIENT_TRUSTED}" "${prefix} ip a sh ${CLIENT_NETDEVS[i]} | grep -w '^[[:space:]]\+inet'")
         then
             fatal "Interface ${CLIENT_NETDEVS[i]} on ${CLIENT_TRUSTED} seems not to have an IPv4."
         fi
@@ -219,6 +232,103 @@ get_ips() {
     done
 }
 
+#return array of namespaces, "NGC_NA" if device was not in a namespace
+get_configured_namespaces() {
+    HOST="$1"
+    DEVICES="$2"
+    local i=0
+    netns_list=$(ssh "${HOST}" "ip netns list | awk '{print \$1}'")
+    for dev in "${DEVICES[@]}"
+    do
+       for netns in $netns_list; do
+           dev_ns=$(ssh "${HOST}"     "ip netns exec $netns ls  /sys/class/infiniband/$dev/device/net 2> /dev/null")
+           if ! [ "$dev_ns" = "" ]; then
+               dev_ns_list[i]="${netns}"
+           fi
+       done
+       if [ "${dev_ns_list[i]}" = "" ]; then
+           dev_ns_list[i]="NGC_NA"
+       fi
+     i=$((i+1))
+     done
+     echo "${dev_ns_list[@]}"
+}
+
+#Return prefix to run on namespace context , or empty string if dev is not in namespace,
+#assuming DEVICES_NS are SERVER name spaces followed by client namespaces
+get_command_prefix(){
+    INDEX=${1}
+    if [[ -v DEVICES_NS && "${DEVICES_NS[INDEX]}" == ngc_ns_* ]]; then
+        echo "ip netns exec ${DEVICES_NS[INDEX]} "
+    else
+        echo ""
+    fi
+}
+
+#Add device with index i to namespace, it will keeping its IP.
+#the new namespace will be ngc_ns_${TIME_STAMP}_${i}
+add_dev_to_namespace() {
+    HOST=$1
+    HOST_DEVS=$2
+    INDEX=$3
+    SERVER_NETDEV=("$(ssh "${HOST}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${HOST_DEVS[INDEX]}")")
+    NEW_NS=ngc_ns_${TIME_STAMP}_${INDEX}
+    NS_PREFIX="ip netns exec ${NEW_NS}"
+    #create namespace
+    ssh "${HOST}" "ip netns add ${NEW_NS}"
+    #Add dev to namespace
+    ssh "${HOST}" "ip link set ${SERVER_NETDEV} netns ${NEW_NS}"
+    ssh "${HOST}" "sudo ${NS_PREFIX} ip link set lo up"
+    ssh "${HOST}" "sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} down; sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} up; sleep 1; sudo ${NS_PREFIX} ip a add ${SERVER_IPS[INDEX]}/${SERVER_IPS_MASK[INDEX]} broadcast + dev ${SERVER_NETDEV}" || :
+
+    echo ${NEW_NS}
+}
+
+#delete the namespaces we created
+delete_namespaces_from_host() {
+    HOST=$1
+    HOST_DEVS=$2
+    DEVICES_NS=$3
+    #loop over name spaces and delete the once we created, and reset there IPs
+    for ((i=0; i<${#HOST_DEVS[@]} ; i++))
+    do
+        if [[ "${DEVICES_NS[i]}" == ngc_ns_* ]]; then
+            prefix="$(get_command_prefix ${i})"
+            HOST_NETDEV="$(ssh "${HOST}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${HOST_DEVS[i]} "${prefix}" ")"
+               ssh "${HOST}" "ip netns delete ${DEVICES_NS[i]}"
+            sleep 2 
+            ssh "${HOST}" "sudo ip l set ${HOST_NETDEV} down; sudo ip l set ${HOST_NETDEV} up; sleep 1 ;  sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${HOST_NETDEV}" || :
+            DEVICES_NS[i]="NGC_NA"
+        fi
+    done
+}
+
+manage_namespaces() {
+    declare -g -a dev_ns_list
+    read -ra SERVER_NS <<< $(get_configured_namespaces $SERVER_TRUSTED $SERVER_DEVICES)
+    read -ra CLIENT_NS <<< $(get_configured_namespaces $CLIENT_TRUSTED $CLIENT_DEVICES)
+    DEVICES_NS=("${SERVER_NS[@]}" "${CLIENT_NS[@]}")
+    get_ips_and_ifs
+
+    #Check if we intend to run external loopback
+    if [ ${CLIENT_TRUSTED} = ${SERVER_TRUSTED} ]
+    then
+        #check if each pair of device are on different namespace, if not add the client devices to namespaces.
+        #without doing so a kernel optimization traffic will pass though kernel and not though the physical layer.
+         for ((i=0; i<${#SERVER_NS[@]} ; i++))
+         do
+             if [ "${CLIENT_NS[i]}" = "${SERVER_NS[i]}" ]; then
+                 #This mean that there is 2 interfaces under same namespace.
+                 SERVER_NS[i]=$(add_dev_to_namespace $SERVER_TRUSTED $SERVER_DEVICES $i)
+             fi
+         done
+    #update array in case SERVER_NS changed
+    DEVICES_NS=("${SERVER_NS[@]}" "${CLIENT_NS[@]}")
+    fi
+    
+    echo "${DEVICES_NS[*]}"
+}
+
 get_ips_and_ifs() {
     get_netdevs
     get_ips
@@ -226,12 +336,17 @@ get_ips_and_ifs() {
 
 get_netdev_from_ibdev() {
     local ibdev netdev sfdev
-
     ibdev="${1}"
-    netdev="$(ls -1 "/sys/class/infiniband/${ibdev}/device/net" | head -1)"
+    if [ "$#" -ne 1 ]; then
+       prefix="${@:2}"
+    else
+       prefix=""
+    fi
+    
+    netdev="$( ${prefix} ls -1 "/sys/class/infiniband/${ibdev}/device/net" | head -1)"
     if mlnx-sf -h &> /dev/null
     then
-        sfdev="$(mlnx-sf -ja show | jq -r --arg SF "${netdev}" '.[] | select(.netdev==$SF) | .sf_netdev' 2>/dev/null)"
+        sfdev="$( ${prefix} mlnx-sf -ja show | jq -r --arg SF "${netdev}" '.[] | select(.netdev==$SF) | .sf_netdev' 2>/dev/null)"
     fi
     [ -z "${sfdev}" ] || netdev="${sfdev}"
     printf "%s" "${netdev}"
@@ -699,20 +814,24 @@ get_cores_for_devices(){
 }
 
 get_min_channels(){
-    min=$(ssh "${SERVER_TRUSTED}" ethtool -l "${SERVER_NETDEVS[0]}" | awk '/Combined/{print $2}' | head -1)
-
+    server_prefix="$(get_command_prefix 0)"
+    min=$(ssh "${SERVER_TRUSTED}" "${server_prefix} ethtool -l ${SERVER_NETDEVS[0]} | awk -F: '/Combined/{print $2;exit;}' | grep -Eo '[0-9]+\$'")
+    i=0
     for dev in "${SERVER_NETDEVS[@]}"
     do
-        tmp=$(ssh "${SERVER_TRUSTED}" ethtool -l "${dev}" | awk '/Combined/{print $2}' | head -1)
+        server_prefix="$(get_command_prefix $i)"
+        tmp=$(ssh "${SERVER_TRUSTED}" "${server_prefix} ethtool -l ${dev} |  awk -F: '/Combined/{print $2;exit;}' | grep -Eo '[0-9]+\$'")
         if [ $tmp -lt $min ]
         then
             min=$tmp
         fi
+        i=$((i+1))
     done
-
+    i=${#SERVER_NETDEVS[@]}
     for dev in "${CLIENT_NETDEVS[@]}"
     do
-        tmp=$(ssh "${CLIENT_TRUSTED}" ethtool -l "${dev}" | awk '/Combined/{print $2}' | head -1)
+        client_prefix="$(get_command_prefix $i)"
+        tmp=$(ssh "${CLIENT_TRUSTED}" "${client_prefix} ethtool -l ${dev} |  awk -F: '/Combined/{print $2;exit;}' | grep -Eo '[0-9]+\$'")
         if [ $tmp -lt $min ]
         then
             min=$tmp
@@ -725,7 +844,12 @@ get_min_channels(){
 disable_pci_RO() {
     local SERVER=$1
     local SERVER_NETDEV=$2
-    pci=$(ssh "${SERVER}" "sudo ethtool -i ${SERVER_NETDEV} | grep "bus-info" | awk '{print \$2}' ")
+    if [ "$#" -ne 1 ]; then
+       prefix="${@:3}"
+    else
+       prefix=""
+    fi
+    pci=$(ssh "${SERVER}" "sudo ${prefix} ethtool -i ${SERVER_NETDEV} | grep "bus-info" | awk '{print \$2}' ")
     sleep 5
     curr_val=$(ssh "${SERVER}" "sudo setpci -s ${pci} 68.b")
     update_val=$(printf '%X\n' "$(( 0x$curr_val & 0xEF ))")
@@ -741,11 +865,16 @@ disable_pci_RO() {
 enable_aRFS() {
     local SERVER=$1
     local SERVER_NETDEV=$2
+    if [ "$#" -ne 1 ]; then
+       prefix="${@:3}"
+    else 
+       prefix=""
+    fi
     #TODO: check if supported
-    ssh "${SERVER}" "sudo ethtool -K ${SERVER_NETDEV} ntuple off"
+    ssh "${SERVER}" "${prefix}sudo ethtool -K ${SERVER_NETDEV} ntuple off"
     ssh "${SERVER}" "sudo bash -c 'echo 0 > /proc/sys/net/core/rps_sock_flow_entries'"
     ## 32768 1170
-    ssh "${SERVER}" "for f in /sys/class/net/${SERVER_NETDEV}/queues/rx-*/rps_flow_cnt; do sudo bash -c \"echo '0' > \${f}\"; done"
+    #ssh "${SERVER}" "${prefix} for f in /sys/class/net/${SERVER_NETDEV}/queues/rx-*/rps_flow_cnt; do sudo bash -c \"echo '0' > \${f}\"; done"
 }
 
 enable_flow_stearing(){
@@ -754,29 +883,30 @@ enable_flow_stearing(){
     local index=$3
     local i
     local -a cmd_arr
-
-    ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done" || :
-    ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done" || :
+    server_ns_prefix=$(get_command_prefix ${i})
+    client_ns_prefix=$(get_command_prefix $((num_devs+i)))
+    ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ${client_ns_prefix} ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done" || :
+    ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ${server_ns_prefix} ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done" || :
     log "done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
     sleep 1
     for ((i=0; i < $NUM_INST; i++))
     do
-        cmd_arr=("ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "dst-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
+        cmd_arr=("${server_ns_prefix} ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "dst-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
         ssh "${SERVER_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
         log "flow starting ${SERVER_TRUSTED}: ${cmd_arr[*]}"
         if [ "$DUPLEX"  = true ]
         then
-            cmd_arr=("ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
+            cmd_arr=("${server_ns_prefix} ethtool" "-U" "${SERVER_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
             ssh "${SERVER_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
             log "flow starting ${SERVER_TRUSTED}: ${cmd_arr[*]}"
-            cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "dst-port" "$((11000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
+            cmd_arr=("${client_ns_prefix} ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "dst-port" "$((11000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
             ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
             log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
-            cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((11000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
+            cmd_arr=("${client_ns_prefix} ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((11000*(index+1) + i))" "loc" "$((i+NUM_INST))" "queue" "$((i+NUM_INST))")
             ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
             log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
         else
-            cmd_arr=("ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
+            cmd_arr=("${client_ns_prefix} ethtool" "-U" "${CLIENT_NETDEV}" "flow-type" "tcp4" "src-port" "$((10000*(index+1) + i))" "loc" "${i}" "queue" "${i}")
             ssh "${CLIENT_TRUSTED}" "sudo ${cmd_arr[*]}" &> /dev/null
             log "flow starting ${CLIENT_TRUSTED}: ${cmd_arr[*]}"
         fi
@@ -809,20 +939,22 @@ tune_tcp() {
     do
         server_netdev="${SERVER_NETDEVS[i]}"
         client_netdev="${CLIENT_NETDEVS[i]}"
+        server_ns_prefix=$(get_command_prefix ${i})
+        client_ns_prefix=$(get_command_prefix $((num_devs+i)))
         #Set number of channels to number of cores per process
-        ssh "${SERVER_TRUSTED}" sudo ethtool -L "${server_netdev}" combined "$CHANNELS"
-        ssh "${CLIENT_TRUSTED}" sudo ethtool -L "${client_netdev}" combined "$CHANNELS"
+        ssh "${SERVER_TRUSTED}" sudo ${server_ns_prefix} ethtool -L "${server_netdev}" combined "$CHANNELS"
+        ssh "${CLIENT_TRUSTED}" sudo ${client_ns_prefix} ethtool -L "${client_netdev}" combined "$CHANNELS"
         if $IS_SERVER_SPR
         then
             #Enhancement:to have multiple profile for SPR , when it is single 400Gb/s port you can set  rx-usecs 128 and rx-frames 512
-            ssh "${SERVER_TRUSTED}" "sudo ethtool -C ${server_netdev} adaptive-rx off ; sudo ethtool -C $server_netdev rx-usecs 128 ; sudo ethtool -C $server_netdev rx-frames 512 ; sudo ethtool -G $server_netdev rx 4096"
-            [ $DISABLE_RO = true ] && disable_pci_RO "${SERVER_TRUSTED}" "${server_netdev}"
+            ssh "${SERVER_TRUSTED}" "sudo ${server_ns_prefix} ethtool -C ${server_netdev} adaptive-rx off ; sudo ${server_ns_prefix} ethtool -C $server_netdev rx-usecs 128 ; sudo ${server_ns_prefix} ethtool -C $server_netdev rx-frames 512 ; sudo ${server_ns_prefix} ethtool -G $server_netdev rx 4096"
+            [ $DISABLE_RO = true ] && disable_pci_RO "${SERVER_TRUSTED}" "${server_netdev}" "${server_ns_prefix}"
         fi
 
         if $IS_CLIENT_SPR
         then
             ssh "${CLIENT_TRUSTED}" "sudo ethtool -C ${client_netdev} adaptive-rx off ; sudo ethtool -C $client_netdev rx-usecs 128 ; sudo ethtool -C $client_netdev rx-frames 512 ; sudo ethtool -G $client_netdev rx 4096"
-            [ $DISABLE_RO = true ] && disable_pci_RO "${CLIENT_TRUSTED}" "${client_netdev}"
+            [ $DISABLE_RO = true ] && disable_pci_RO "${CLIENT_TRUSTED}" "${client_netdev}" ${client_ns_prefix}
         fi
 
         NUM_CORES_AFFINITY=$((NUM_INST/2))
@@ -838,19 +970,19 @@ tune_tcp() {
 
         #add dummy core at the start since the first one is used to sync, this will allow us to have one
 
-        ssh "${SERVER_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
-        ssh "${CLIENT_TRUSTED}" sudo set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
+        ssh "${SERVER_TRUSTED}" sudo ${server_ns_prefix} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
+        ssh "${CLIENT_TRUSTED}" sudo ${client_ns_prefix} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
         log "Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
         log "Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
         #Enable aRFS
-        if [ ${LINK_TYPE} -eq 1 ]; then
-            enable_aRFS "${SERVER_TRUSTED}" "${server_netdev}"
-            enable_aRFS "${CLIENT_TRUSTED}" "${client_netdev}"
+        if [ ${LINK_TYPE} -eq 9 ]; then
+            enable_aRFS "${SERVER_TRUSTED}" "${server_netdev} ${server_ns_prefix}"
+            enable_aRFS "${CLIENT_TRUSTED}" "${client_netdev} ${client_ns_prefix}"
         fi
         enable_flow_stearing $client_netdev $server_netdev $i
 
-        ssh "${SERVER_TRUSTED}" "sudo ip l set ${server_netdev} down; sudo ip l set ${server_netdev} up; sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}" || :
-        ssh "${CLIENT_TRUSTED}" "sudo ip l set ${client_netdev} down; sudo ip l set ${client_netdev} up; sudo ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}" || :
+        ssh "${SERVER_TRUSTED}" "sudo ${server_ns_prefix} ip l set ${server_netdev} down; sudo ${server_ns_prefix} ip l set ${server_netdev} up; sleep 1 ; sudo ${server_ns_prefix} ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}" || :
+        ssh "${CLIENT_TRUSTED}" "sudo ${client_ns_prefix} ip l set ${client_netdev} down; sudo ${client_ns_prefix} ip l set ${client_netdev} up; sleep 1 ; sudo ${client_ns_prefix} ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}" || :
     done
 }
 
@@ -859,13 +991,15 @@ run_iperf_servers() {
     local -a cmd_arr
     for ((; dev_idx<NUM_DEVS; dev_idx++))
     do
+        server_ns_prefix=$(get_command_prefix ${i})
+        client_ns_prefix=$(get_command_prefix $((NUM_DEVS+i)))
         local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE ))
         for i in `seq 0 $((NUM_INST-1))`; do
             sleep 0.1
             index=$((i+OFFSET_S))
             core="${CORES_ARRAY[index]}"
             prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
-            cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
+            cmd_arr=("${server_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
             ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} &> /dev/null" &
             log "run iperf3 server on ${SERVER_TRUSTED}: ${cmd_arr[*]}"
         done
@@ -879,7 +1013,7 @@ run_iperf_servers() {
                 index=$(( i+OFFSET_C ))
                 core="${CORES_ARRAY[index]}"
                 prt=$((BASE_TCP_POTR + 1000 + 11000*dev_idx + i ))
-                cmd_arr=("taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
+                cmd_arr=("${client_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
                 ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]} &> /dev/null " &
                 log "run iperf3 server on ${CLIENT_TRUSTED} core index=${index}: ${cmd_arr[*]}"
             done
@@ -900,9 +1034,12 @@ run_iperf_clients() {
         DUPLEX_OFFSET=$NUM_INST
     fi
     local dev_idx=0
+
     for ((; dev_idx<NUM_DEVS; dev_idx++))
     do
         local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE + NUM_DEVS*NUM_CORES_PER_DEVICE + DUPLEX_OFFSET))
+        client_ns_prefix=$(get_command_prefix $((NUM_DEVS+dev_idx)))
+        server_ns_prefix=$(get_command_prefix ${dev_idx})
         for i in `seq 0 $((NUM_INST-1))`; do
             sleep 0.1
             index=$((i+OFFSET_S))
@@ -910,7 +1047,7 @@ run_iperf_clients() {
             dev_base_port=$((BASE_TCP_POTR + 10000*dev_idx))
             prt=$((dev_base_port + i ))
             ip_i=${SERVER_IPS[dev_idx]}
-            cmd_arr=("taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
+            cmd_arr=("${client_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
                      "-c" "${ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}" "-J"
                      "--logfile"
                      "/tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
@@ -930,7 +1067,7 @@ run_iperf_clients() {
                 dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
                 prt=$((dev_base_port + i ))
                 ip_i=${CLIENT_IPS[dev_idx]}
-                cmd_arr=("taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
+                cmd_arr=("${server_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
                          "-c" "${ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}"
                          "-J" "--logfile"
                          "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
@@ -1158,6 +1295,7 @@ collect_BW() {
         [[ "$IS_CLIENT_SPR" = "true" ]] && log "Client side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro" WARNING
         [[ "$IS_SERVER_SPR" = "true" ]] && log "Server side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro" WARNING
         log "Failed - servers failed ngc_tcp_test with the given HCAs" RESULT_FAIL
+        delete_namespaces_from_host ${SERVER_TRUSTED} ${SERVER_DEVICES} ${DEVICES_NS}
         return 1
     else
         log "Passed - servers passed ngc_tcp_test with the given HCAs" RESULT_PASS
