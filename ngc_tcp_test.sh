@@ -74,6 +74,7 @@ SERVER_TRUSTED="${3}"
 SERVER_DEVICES=(${4//,/ })
 IS_CLIENT_SPR=false
 IS_SERVER_SPR=false
+TIME_STAMP=$(date +%s)
 
 
 [[ "$DUPLEX" == "FULL" ]] && DUPLEX=true || DUPLEX=false
@@ -108,6 +109,9 @@ case "${DUPLEX}" in
         (( MAX_PROC > (NUM_DEVS + 1) )) || fatal "max_proc is set too low."
         ;;
 esac
+
+#Check if interfaces are in namespace and if it is a local loopback create namespaces
+read -ra DEVICES_NS <<< $(manage_namespaces)
 
 #init the arrays SERVER_IPS,CLIENT_IPS,SERVER_NETDEVS,CLIENT_NETDEVS
 get_ips_and_ifs
@@ -160,7 +164,8 @@ then
         set_ip ${CLIENT_TRUSTED} ${CLIENT_NETDEVS[index1]} "${CLIENT_IPS[index1]}/${CLIENT_IPS_MASK[index1]}" ${SERVER_TRUSTED} ${SERVER_NETDEVS[index1]} "${SERVER_IPS[index1]}/${SERVER_IPS_MASK[index1]}"
     done
 fi
-LINK_TYPE="$(ssh "${CLIENT_TRUSTED}" "cat /sys/class/net/${CLIENT_NETDEVS[0]}/type")"
+server_1_prefix="$(get_command_prefix 0)"
+LINK_TYPE="$(ssh "${SERVER_TRUSTED}" "${server_1_prefix} cat /sys/class/net/${SERVER_NETDEVS[0]}/type")"
 [ $CHANGE_MTU = "CHANGE" ] && change_mtu
 min_l=$(get_min_channels)
 opt_proc=$((min_l<MAX_PROC ? min_l : MAX_PROC))
@@ -192,7 +197,6 @@ tune_tcp
 #Relaxed ordring was disabled - user need to restart the driver so that the change take affect.
 [ "${FORCE_EXIT}" != "true" ] || fatal "Please restart driver after disabling relaxed ordering (RO), and run the script again."
 
-TIME_STAMP=$(date +%s)
 #Run server side
 run_iperf_servers
 sleep 2
@@ -234,3 +238,4 @@ then
         done
     done
 fi
+delete_namespaces_from_host ${SERVER_TRUSTED} ${SERVER_DEVICES} ${DEVICES_NS}
