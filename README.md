@@ -88,8 +88,10 @@ each device.
 ## TCP test
 
 Will automatically detect device local NUMA node, disable IRQ balancer,
-increase MTU to max and run `iperf3` on the closest NUMA nodes. Report
-aggregated throughput is in Gb/s.
+increase MTU to max and run `iperf3` on the closest NUMA nodes.
+Test also supports running on loopback by using namespaces,
+can be either configured by the user or we will create them automatically.
+Report aggregated throughput is in Gb/s.
 
 ### Usage:
 
