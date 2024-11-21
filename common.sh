@@ -76,10 +76,10 @@ change_local_mtu() {
     mtu="${3}"
     ns_prefix=""${@:4}""
 
-    echo "${mtu}" > "${ns_prefix}/sys/class/net/${netdev}/mtu"
-    for dev in "${ns_prefix} /sys/class/infiniband/${ibdev}/device/net/*"
+    ${ns_prefix} echo "${mtu}" > "/sys/class/net/${netdev}/mtu"
+    for dev in $(${ns_prefix} ls /sys/class/infiniband/${ibdev}/device/net/)
     do
-        echo "${mtu}" > "${ns_prefix}/sys/class/net/${dev##*/}/mtu"
+        echo "${mtu}" | ${ns_prefix} tee "/sys/class/net/${dev##*/}/mtu"  > /dev/null
     done
 }
 
@@ -279,7 +279,7 @@ add_dev_to_namespace() {
     #Add dev to namespace
     ssh "${HOST}" "ip link set ${SERVER_NETDEV} netns ${NEW_NS}"
     ssh "${HOST}" "sudo ${NS_PREFIX} ip link set lo up"
-    ssh "${HOST}" "sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} down; sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} up; sleep 1; sudo ${NS_PREFIX} ip a add ${SERVER_IPS[INDEX]}/${SERVER_IPS_MASK[INDEX]} broadcast + dev ${SERVER_NETDEV}" || :
+    ssh "${HOST}" "sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} down; sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} up; sleep 2; sudo ${NS_PREFIX} ip a add ${SERVER_IPS[INDEX]}/${SERVER_IPS_MASK[INDEX]} broadcast + dev ${SERVER_NETDEV}" || :
 
     echo ${NEW_NS}
 }
@@ -296,8 +296,8 @@ delete_namespaces_from_host() {
             prefix="$(get_command_prefix ${i})"
             HOST_NETDEV="$(ssh "${HOST}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${HOST_DEVS[i]} "${prefix}" ")"
                ssh "${HOST}" "ip netns delete ${DEVICES_NS[i]}"
-            sleep 2 
-            ssh "${HOST}" "sudo ip l set ${HOST_NETDEV} down; sudo ip l set ${HOST_NETDEV} up; sleep 1 ;  sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${HOST_NETDEV}" || :
+            sleep 2
+            ssh "${HOST}" "sudo ip l set ${HOST_NETDEV} down; sudo ip l set ${HOST_NETDEV} up; sleep 2 ;  sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${HOST_NETDEV}" || :
             DEVICES_NS[i]="NGC_NA"
         fi
     done
@@ -325,7 +325,7 @@ manage_namespaces() {
     #update array in case SERVER_NS changed
     DEVICES_NS=("${SERVER_NS[@]}" "${CLIENT_NS[@]}")
     fi
-    
+
     echo "${DEVICES_NS[*]}"
 }
 
@@ -342,11 +342,10 @@ get_netdev_from_ibdev() {
     else
        prefix=""
     fi
-    
     netdev="$( ${prefix} ls -1 "/sys/class/infiniband/${ibdev}/device/net" | head -1)"
     if mlnx-sf -h &> /dev/null
     then
-        sfdev="$( ${prefix} mlnx-sf -ja show | jq -r --arg SF "${netdev}" '.[] | select(.netdev==$SF) | .sf_netdev' 2>/dev/null)"
+        sfdev="$(mlnx-sf -ja show | sed 's/^No SF device found$/{}/' | jq -r --arg SF "${netdev}" '.[] | select(.netdev==$SF) | .sf_netdev' 2>/dev/null)"
     fi
     [ -z "${sfdev}" ] || netdev="${sfdev}"
     printf "%s" "${netdev}"
@@ -867,7 +866,7 @@ enable_aRFS() {
     local SERVER_NETDEV=$2
     if [ "$#" -ne 1 ]; then
        prefix="${@:3}"
-    else 
+    else
        prefix=""
     fi
     #TODO: check if supported
@@ -981,8 +980,8 @@ tune_tcp() {
         fi
         enable_flow_stearing $client_netdev $server_netdev $i
 
-        ssh "${SERVER_TRUSTED}" "sudo ${server_ns_prefix} ip l set ${server_netdev} down; sudo ${server_ns_prefix} ip l set ${server_netdev} up; sleep 1 ; sudo ${server_ns_prefix} ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}" || :
-        ssh "${CLIENT_TRUSTED}" "sudo ${client_ns_prefix} ip l set ${client_netdev} down; sudo ${client_ns_prefix} ip l set ${client_netdev} up; sleep 1 ; sudo ${client_ns_prefix} ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}" || :
+        ssh "${SERVER_TRUSTED}" "sudo ${server_ns_prefix} ip l set ${server_netdev} down; sudo ${server_ns_prefix} ip l set ${server_netdev} up; sleep 2 ; sudo ${server_ns_prefix} ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}" || :
+        ssh "${CLIENT_TRUSTED}" "sudo ${client_ns_prefix} ip l set ${client_netdev} down; sudo ${client_ns_prefix} ip l set ${client_netdev} up; sleep 2 ; sudo ${client_ns_prefix} ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}" || :
     done
 }
 
