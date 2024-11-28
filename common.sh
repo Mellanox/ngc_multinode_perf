@@ -474,6 +474,8 @@ find_cuda() {
 }
 
 get_cudas_per_rdma_device() {
+    local node_relations
+
     SERVER_TRUSTED="${1}"
     RDMA_DEVICE="$2"
     USER_DEF_CUDA="${3}"
@@ -495,7 +497,10 @@ get_cudas_per_rdma_device() {
     #loop over expected relations between NIC and GPU:
     #if there is a connection traversing at most a single PCIe bridge - PIX
     #if there is a connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge) - PXB
-    for RELATION in "PIX" "PXB"
+    #[optional] connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node - NODE
+    node_relations=( "PIX" "PXB" )
+    [ "${ALLOW_GPU_NODE_RELATION}" != true ] || node_relations+=( "NODE" )
+    for RELATION in "${node_relations[@]}"
     do
         find_cuda "$SERVER_TRUSTED" "$NICX" "$RELATION"
     done

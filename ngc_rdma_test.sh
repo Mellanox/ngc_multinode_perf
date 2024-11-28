@@ -16,6 +16,7 @@ mtu_sizes=()
 server_cuda=""
 client_cuda=""
 ALLOW_CORE_ZERO=false
+ALLOW_GPU_NODE_RELATION=false
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
@@ -79,6 +80,11 @@ do
             IPSEC=true
             shift
             ;;
+        --allow_gpu_node_relation)
+            [ "${RUN_WITH_CUDA}" = true ] || fatal "--allow_gpu_node_relation can only be used with --use_cuda"
+            ALLOW_GPU_NODE_RELATION=true
+            shift
+            ;;
         --*)
             fatal "Unknown option ${1}"
             ;;
@@ -119,7 +125,7 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [--tests=<list of ib perftests>] [--duration=<time in seconds>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd]
+Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [--tests=<list of ib perftests>] [--duration=<time in seconds>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd] [--allow_gpu_node_relation]
 
 Options:
 	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
@@ -135,6 +141,7 @@ Options:
 	--unidir: Run in unidir (default: bidir)
 	--ipsec: Enable IPsec packet offload (full-offload) on the Arm cores.
 	--sd: Enable Socket Direct support. The SD should be added after the device (see example below).
+	--allow_gpu_node_relation: Allow 'node' relation between GPU and NIC (connection traversing PCIe as well as the interconnect between PCIe host bridges within a NUMA node). This may result in lower performance, so use only if necessary. Use 'nvidia-smi topo -mp' to see all the available relations on the system.
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
