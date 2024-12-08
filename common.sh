@@ -1192,8 +1192,8 @@ print_stats(){
 }
 
 sd_func(){
-    BW1=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${MLNX_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
-    BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${SD_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
+    BW1=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${TEST}_${MLNX_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
+    BW2=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${TEST}_${SD_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
     BW=$((BW1 + BW2))
     log "Device ${MLNX_DEVICES[dev_idx]} & ${SD_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * multiplier)) Gb/s)"
     if [[ ${BW} -lt ${BW_PASS_RATE} ]]; then
