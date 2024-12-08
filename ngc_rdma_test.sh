@@ -8,6 +8,7 @@ default_qps=4
 max_qps=64
 bw_ms_list=("65536")
 lat_ms_list=("2")
+min_send_lat_ms=32
 server_QPS=()
 client_QPS=()
 conn_type_cmd=()
@@ -271,7 +272,7 @@ fi
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
 for TEST in "${TESTS[@]}"; do
     logstring[0]="${TEST}"
-    if [ $RUN_WITH_CUDA ] && grep -q '^ib_write_lat\|ib_send_lat$' <<<"${TEST}"
+    if [ $RUN_WITH_CUDA ] && grep -q '^ib_write_lat$' <<<"${TEST}"
     then
         log "Skip ${TEST} when running with CUDA"
         continue
@@ -320,6 +321,11 @@ for TEST in "${TESTS[@]}"; do
         PASS=true
         for message_size in "${ms_list[@]}"
         do
+            if [ "${RUN_WITH_CUDA}" = true ] && ((message_size <= min_send_lat_ms)) && grep -q '^ib_send_lat$' <<<"${TEST}"
+            then
+                log "Skip ${TEST} when running with CUDA - message size is too small (${message_size}), consider using '--lat_message-size-list'"
+                continue
+            fi
             run_perftest_servers
             sleep 2
             run_perftest_clients
