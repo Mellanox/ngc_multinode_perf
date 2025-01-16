@@ -856,11 +856,11 @@ disable_pci_RO() {
     fi
     pci=$(ssh "${SERVER}" "sudo ${prefix} ethtool -i ${SERVER_NETDEV} | grep "bus-info" | awk '{print \$2}' ")
     sleep 5
-    curr_val=$(ssh "${SERVER}" "sudo setpci -s ${pci} 68.b")
+    curr_val=$(ssh "${SERVER}" "sudo setpci -s ${pci} CAP_EXP+8.b")
     update_val=$(printf '%X\n' "$(( 0x$curr_val & 0xEF ))")
     if ! [ "${curr_val,,}" = "${update_val,,}" ]
     then
-        ssh "${SERVER}" "sudo setpci -s ${pci} 68.b=$update_val"
+        ssh "${SERVER}" "sudo setpci -s ${pci} CAP_EXP+8.b=$update_val"
         log "PCIe ${pci} relaxed ordering was disabled - please restart driver" WARNING
         FORCE_EXIT=true
     fi
