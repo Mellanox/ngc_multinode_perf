@@ -929,8 +929,8 @@ is_SPR() {
 #CLIENT_TRUSTED,CLIENT_DEVICES,SERVER_TRUSTED,SERVER_DEVICES,NUM_INST,NUM_CORES_PER_DEVICE,CORES_ARRAY
 tune_tcp() {
     # Stop IRQ balancer service
-    ssh "${CLIENT_TRUSTED}" sudo systemctl stop irqbalance
-    ssh "${SERVER_TRUSTED}" sudo systemctl stop irqbalance
+    ssh "${CLIENT_TRUSTED}" '! systemctl is-active --quiet irqbalance.service || sudo systemctl stop irqbalance.service'
+    ssh "${SERVER_TRUSTED}" '! systemctl is-active --quiet irqbalance.service || sudo systemctl stop irqbalance.service'
     #Check if special tuning for Sapphire Rapid system is needed
     IS_SERVER_SPR=$(is_SPR "${SERVER_TRUSTED}")
     IS_CLIENT_SPR=$(is_SPR "${CLIENT_TRUSTED}")
