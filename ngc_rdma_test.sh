@@ -41,6 +41,14 @@ do
             client_cuda_idx=${1#*=}
             shift
             ;;
+        --use_cuda_dmabuf)
+            DMABUF=true
+            shift
+            ;;
+        --use_data_direct)
+            DATA_DIRECT=true
+            shift
+            ;;
         --all_connection_types)
             ALL_CONN_TYPES=true
             shift
@@ -129,9 +137,11 @@ Run RDMA test
 Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [--tests=<list of ib perftests>] [--duration=<time in seconds>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd] [--allow_gpu_node_relation]
 
 Options:
-	--use_cuda : add this flag to run BW perftest benchamrks on GPUs
+	--use_cuda: add this flag to run BW perftest benchamrks on GPUs
 	--server_cuda=<cuda device index>: Use the specified cuda device
 	--client_cuda=<cuda device index>: Use the specified cuda device
+	--use_cuda_dmabuf: Use CUDA DMA-BUF for GPUDirect RDMA testing
+	--use_data_direct: Use mlx5dv_reg_dmabuf_mr verb
 	--qp=<num of QPs>: Use the sepecified QPs' number (default: 4 QPs per device, max: ${max_qps})
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
