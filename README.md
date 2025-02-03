@@ -38,6 +38,8 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     [<client username>@]<client hostname/ip> <client ib device>[,<client ib device2>,...] \
     [<server username>@]<server hostname/ip> <server ib device>[,<server ib device2>,...] \
     [--use_cuda] \
+    [--use_cuda_dmabuf] \
+    [--use_data_direct] \
     [--qp=<num of QPs, default: total 4>] \
     [--all_connection_types | --conn=<list of connection types>] \
     [--tests=<list of ib perftests>] \
