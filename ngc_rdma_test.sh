@@ -65,11 +65,11 @@ do
             IFS=',' read -ra TESTS <<< "${1#*=}"
             shift
             ;;
-        --bw_message-size-list=*)
+        --bw_message_size_list=*)
             IFS=',' read -ra bw_ms_list <<< "${1#*=}"
             shift
             ;;
-        --lat_message-size-list=*)
+        --lat_message_size_list=*)
             IFS=',' read -ra lat_ms_list <<< "${1#*=}"
             shift
             ;;
@@ -147,8 +147,8 @@ Options:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
 	--tests=<list of ib perftests>: Use this flag to provide a comma-separated list of ib perftests to run.
 	--duration=<time in seconds>: Specify the duration for each test (default: 30 seconds)
-	--bw_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run bw tests (default: 65536)
-	--lat_message-size-list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
+	--bw_message_size_list=<list of message sizes>: Use this flag to provide a comma separated message size list to run bw tests (default: 65536)
+	--lat_message_size_list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
 	--unidir: Run in unidir (default: bidir)
 	--ipsec: Enable IPsec packet offload (full-offload) on the Arm cores.
 	--sd: Enable Socket Direct support. The SD should be added after the device (see example below).
@@ -333,7 +333,7 @@ for TEST in "${TESTS[@]}"; do
         do
             if [ "${RUN_WITH_CUDA}" = true ] && ((message_size <= min_send_lat_ms)) && grep -q '^ib_send_lat$' <<<"${TEST}"
             then
-                log "Skip ${TEST} when running with CUDA - message size is too small (${message_size}), consider using '--lat_message-size-list'"
+                log "Skip ${TEST} when running with CUDA - message size is too small (${message_size}), consider using '--lat_message_size_list'"
                 continue
             fi
             run_perftest_servers
