@@ -42,11 +42,11 @@ do
             shift
             ;;
         --use_cuda_dmabuf)
-            DMABUF=true
+            dmabuf="--use_cuda_dmabuf"
             shift
             ;;
         --use_data_direct)
-            DATA_DIRECT=true
+            datadirect="--use_data_direct"
             shift
             ;;
         --all_connection_types)
