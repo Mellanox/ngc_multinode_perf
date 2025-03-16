@@ -1142,16 +1142,10 @@ run_perftest_servers() {
             CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[dev_idx]}" "${server_cuda_idx}" | cut -d , -f 1)
             server_cuda="--use_cuda=${CUDA_INDEX}"
             fi
-        if [ $DMABUF ]; then
-            extra_server_args+=("--use_cuda_dmabuf")
-        fi
-        if [ $DATA_DIRECT ]; then
-            extra_server_args+=("--use_data_direct")
-        fi
         extra_server_args_str="${extra_server_args[*]//%%QPS%%/${server_QPS[dev_idx]}}"
         cmd_arr=("sudo" "taskset" "-c" "${core}" "${TEST}" "-d" "${SERVER_DEVICES[dev_idx]}"
                  "-s" "${message_size}" "-D" "${TEST_DURATION}" "-p" "${prt}" "-F"
-                 "${conn_type_cmd[*]}" "${server_cuda}" "${extra_server_args_str}")
+                 "${conn_type_cmd[*]}" "${server_cuda}" "${dmabuf}" "${datadirect}" "${extra_server_args_str}")
         ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} >> /dev/null &" &
         log "run ${TEST} server on ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
     done
@@ -1177,17 +1171,11 @@ run_perftest_clients() {
             CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}" "${client_cuda_idx}" | cut -d , -f 1)
             client_cuda="--use_cuda=${CUDA_INDEX}"
             fi
-        if [ $DMABUF ]; then
-            extra_client_args+=("--use_cuda_dmabuf")
-        fi
-        if [ $DATA_DIRECT ]; then
-            extra_client_args+=("--use_data_direct")
-        fi
         ip_i=${SERVER_IPS[dev_idx]}
         extra_client_args_str="${extra_client_args[*]//%%QPS%%/${client_QPS[dev_idx]}}"
         cmd_arr=("sudo" "taskset" "-c" "${core}" "${TEST}" "-d" "${CLIENT_DEVICES[dev_idx]}"
                  "-D" "${TEST_DURATION}" "${SERVER_TRUSTED#*@}" "-s" "${message_size}" "-p" "${prt}"
-                 "-F" "${conn_type_cmd[*]}" "${client_cuda}"
+                 "-F" "${conn_type_cmd[*]}" "${client_cuda}" "${dmabuf}" "${datadirect}"
                  "${extra_client_args_str}" "--out_json"
                  "--out_json_file=/tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json"
                  "&")
