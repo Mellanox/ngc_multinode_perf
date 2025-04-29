@@ -1139,7 +1139,7 @@ run_perftest_servers() {
         prt=$((BASE_RDMA_PORT + dev_idx ))
         if [ $RUN_WITH_CUDA ]
             then
-            CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[dev_idx]}" "${server_cuda_idx}" | cut -d , -f 1)
+            CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[dev_idx]}" "${server_cuda_idx[dev_idx]}" | cut -d , -f 1)
             server_cuda="--use_cuda=${CUDA_INDEX}"
             cuda_order="CUDA_DEVICE_ORDER=PCI_BUS_ID"
             fi
@@ -1169,7 +1169,7 @@ run_perftest_clients() {
         prt=$((dev_base_port))
         if [ $RUN_WITH_CUDA ]
             then
-            CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}" "${client_cuda_idx}" | cut -d , -f 1)
+            CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}" "${client_cuda_idx[dev_idx]}" | cut -d , -f 1)
             client_cuda="--use_cuda=${CUDA_INDEX}"
             cuda_order="CUDA_DEVICE_ORDER=PCI_BUS_ID"
             fi

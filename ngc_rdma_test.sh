@@ -33,12 +33,14 @@ do
             ;;
         --server_cuda=*)
             [ "${RUN_WITH_CUDA}" = true ] || fatal "--server_cuda can only be used with --use_cuda"
-            server_cuda_idx=${1#*=}
+            IFS=, read -r -a server_cuda_idx <<<"${1#*=}"
+            #server_cuda_idx=${1#*=}
             shift
             ;;
         --client_cuda=*)
             [ "${RUN_WITH_CUDA}" = true ] || fatal "--client_cuda can only be used with --use_cuda"
-            client_cuda_idx=${1#*=}
+            IFS=, read -r -a client_cuda_idx <<<"${1#*=}"
+            #client_cuda_idx=${1#*=}
             shift
             ;;
         --use_cuda_dmabuf)
