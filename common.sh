@@ -508,11 +508,11 @@ run_iperf3() {
 
     ssh "${SERVER_TRUSTED}" "bash -s" -- < "${scriptdir}/run_iperf3_servers.sh" \
         "${PROC}" "${SERVER_NUMA_NODE}" "${SERVER_LOGICAL_NUMA_PER_SOCKET}" \
-        "${SERVER_BASE_NUMA}" "${BASE_TCP_PORT}" &
+        "${SERVER_BASE_NUMA}" "${BASE_TCP_PORT}" "${SERVER_IP[$((P%IP_AMOUNT))]}" &
     if [ "$DUPLEX" = "true" ]; then
         ssh "${CLIENT_TRUSTED}" "bash -s" -- < "${scriptdir}/run_iperf3_servers.sh" \
             "${PROC}" "${CLIENT_NUMA_NODE}" "${CLIENT_LOGICAL_NUMA_PER_SOCKET}" \
-            "${CLIENT_BASE_NUMA}" "${BASE_TCP_PORT}" &
+            "${CLIENT_BASE_NUMA}" "${BASE_TCP_PORT}" "${CLIENT_IP[$((P%IP_AMOUNT))]}" &
     fi
 
     check_connection
@@ -520,13 +520,13 @@ run_iperf3() {
     ssh "${CLIENT_TRUSTED}" "bash -s" -- < "${scriptdir}/run_iperf3_clients.sh" \
         "${RESULT_FILE}" "${PROC}" "${CLIENT_NUMA_NODE}" "${CLIENT_LOGICAL_NUMA_PER_SOCKET}" \
         "${CLIENT_BASE_NUMA}" "${SERVER_IP[$((P%IP_AMOUNT))]}" \
-        "${BASE_TCP_PORT}" "${THREADS}" "${TIME}" &
+        "${BASE_TCP_PORT}" "${THREADS}" "${TIME}" "${CLIENT_IP[$((P%IP_AMOUNT))]}" &
     if [ "$DUPLEX" = "true" ]; then
         sleep 0.1
         ssh "${SERVER_TRUSTED}" "bash -s" -- < "${scriptdir}/run_iperf3_clients.sh" \
             "${RESULT_FILE}" "${PROC}" "${SERVER_NUMA_NODE}" "${SERVER_LOGICAL_NUMA_PER_SOCKET}" \
             "${SERVER_BASE_NUMA}" "${CLIENT_IP[$((P%IP_AMOUNT))]}" \
-            "${BASE_TCP_PORT}" "${THREADS}" "${TIME}" &
+            "${BASE_TCP_PORT}" "${THREADS}" "${TIME}" "${SERVER_IP[$((P%IP_AMOUNT))]}" &
     fi
 
     DURATION=$((TIME - 1))
@@ -1002,7 +1002,8 @@ run_iperf_servers() {
             index=$((i+OFFSET_S))
             core="${CORES_ARRAY[index]}"
             prt=$((BASE_TCP_POTR + 10000*dev_idx + i ))
-            cmd_arr=("${server_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
+            bind_ip_i=${SERVER_IPS[dev_idx]}
+            cmd_arr=("${server_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-s" "-B" "${bind_ip_i}" "-p" "${prt}" "--one-off")
             ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} &> /dev/null" &
             log "run iperf3 server on ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
         done
@@ -1016,7 +1017,8 @@ run_iperf_servers() {
                 index=$(( i+OFFSET_C ))
                 core="${CORES_ARRAY[index]}"
                 prt=$((BASE_TCP_POTR + 1000 + 11000*dev_idx + i ))
-                cmd_arr=("${client_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-s" "-p" "${prt}" "--one-off")
+                bind_ip_i=${CLIENT_IPS[dev_idx]}
+                cmd_arr=("${client_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-s" "-B" "${bind_ip_i}" "-p" "${prt}" "--one-off")
                 ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]} &> /dev/null " &
                 log "run iperf3 server on ${CLIENT_TRUSTED#*@} core index=${index}: ${cmd_arr[*]}"
             done
@@ -1050,8 +1052,9 @@ run_iperf_clients() {
             dev_base_port=$((BASE_TCP_POTR + 10000*dev_idx))
             prt=$((dev_base_port + i ))
             ip_i=${SERVER_IPS[dev_idx]}
+            bind_ip_i=${CLIENT_IPS[dev_idx]}
             cmd_arr=("${client_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
-                     "-c" "${ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}" "-J"
+                     "-c" "${ip_i}" "-B" "${bind_ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}" "-J"
                      "--logfile"
                      "/tmp/iperf3_c_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
                      "&")
@@ -1070,8 +1073,9 @@ run_iperf_clients() {
                 dev_base_port=$((BASE_TCP_POTR + 1000 + 11000*dev_idx))
                 prt=$((dev_base_port + i ))
                 ip_i=${CLIENT_IPS[dev_idx]}
+                bind_ip_i=${SERVER_IPS[dev_idx]}
                 cmd_arr=("${server_ns_prefix}" "taskset" "-c" "${core}" "iperf3" "-Z" "-N" "-i" "60"
-                         "-c" "${ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}"
+                         "-c" "${ip_i}" "-B" "${bind_ip_i}" "-t" "${TEST_DURATION}" "-p" "${prt}"
                          "-J" "--logfile"
                          "/tmp/iperf3_s_output_${TIME_STAMP}_${dev_base_port}_${i}.log"
                          "&")
