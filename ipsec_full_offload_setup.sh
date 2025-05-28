@@ -22,11 +22,9 @@ update_mlnx_bf_conf() {
     if [ -z "$current_setting" ]; then
         echo "$ipsec_setting" >> "$mlnx_conf"
         echo "Added $ipsec_setting to $mlnx_conf"
-        ssh "$client" "sudo systemctl stop mlx-regex; /etc/init.d/openibd restart; systemctl restart mlx-regex"
     elif [ "$current_setting" = "no" ]; then
         ssh "$client" "sudo sed -i 's/IPSEC_FULL_OFFLOAD=\"no\"/IPSEC_FULL_OFFLOAD=\"yes\"/' \"$mlnx_conf\""
         echo "Changed IPSEC_FULL_OFFLOAD setting to 'yes' in $mlnx_conf on $client"
-        ssh "$client" "sudo systemctl stop mlx-regex; /etc/init.d/openibd restart; systemctl restart mlx-regex"
     else
         echo "IPSEC_FULL_OFFLOAD is already set to 'yes' in $mlnx_conf on $client"
     fi
@@ -41,11 +39,9 @@ update_mlnx_bf_conf_revert() {
     if [ -z "$current_setting" ]; then
         echo "$ipsec_setting" >> "$mlnx_conf"
         echo "Added $ipsec_setting to $mlnx_conf"
-        ssh "$client" "sudo systemctl stop mlx-regex; /etc/init.d/openibd restart; systemctl restart mlx-regex"
     elif [ "$current_setting" = "yes" ]; then
         ssh "$client" "sudo sed -i 's/IPSEC_FULL_OFFLOAD=\"yes\"/IPSEC_FULL_OFFLOAD=\"no\"/' \"$mlnx_conf\""
         echo "Changed IPSEC_FULL_OFFLOAD setting to 'no' in $mlnx_conf on $client"
-        ssh "$client" "sudo systemctl stop mlx-regex; /etc/init.d/openibd restart; systemctl restart mlx-regex"
     else
         echo "IPSEC_FULL_OFFLOAD is already set to 'no' in $mlnx_conf on $client"
     fi
