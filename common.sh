@@ -76,10 +76,10 @@ change_local_mtu() {
     mtu="${3}"
     ns_prefix=""${@:4}""
 
-    echo "${mtu}" | ${ns_prefix} tee "/sys/class/net/${netdev}/mtu"
+    echo "${mtu}" | sudo ${ns_prefix} tee "/sys/class/net/${netdev}/mtu"
     for dev in $(${ns_prefix} ls /sys/class/infiniband/${ibdev}/device/net/)
     do
-        echo "${mtu}" | ${ns_prefix} tee "/sys/class/net/${dev##*/}/mtu"  > /dev/null
+        echo "${mtu}" | sudo ${ns_prefix} tee "/sys/class/net/${dev##*/}/mtu" > /dev/null
     done
 }
 
@@ -94,8 +94,8 @@ change_mtu() {
     do
         server_ns_prefix=$(get_command_prefix ${i})
         client_ns_prefix=$(get_command_prefix $((i+num_devs)))
-        ssh "${CLIENT_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${CLIENT_DEVICES[i]} ${CLIENT_NETDEVS[i]} ${MTU} ${client_ns_prefix} " " '"
-        ssh "${SERVER_TRUSTED}" "sudo bash -c '$(typeset -f change_local_mtu); change_local_mtu ${SERVER_DEVICES[i]} ${SERVER_NETDEVS[i]} ${MTU} ${server_ns_prefix}'"
+        ssh "${CLIENT_TRUSTED}" "bash -c '$(typeset -f change_local_mtu); change_local_mtu ${CLIENT_DEVICES[i]} ${CLIENT_NETDEVS[i]} ${MTU} ${client_ns_prefix} " " '"
+        ssh "${SERVER_TRUSTED}" "bash -c '$(typeset -f change_local_mtu); change_local_mtu ${SERVER_DEVICES[i]} ${SERVER_NETDEVS[i]} ${MTU} ${server_ns_prefix}'"
         CURR_MTU="$(ssh "${CLIENT_TRUSTED}" "${client_ns_prefix} cat /sys/class/net/${CLIENT_NETDEVS[i]}/mtu")"
         ((CURR_MTU == MTU)) || log 'Warning, MTU was not configured correctly on Client'
         CURR_MTU="$(ssh "${SERVER_TRUSTED}" " ${server_ns_prefix} cat /sys/class/net/${SERVER_NETDEVS[i]}/mtu")"
@@ -877,7 +877,7 @@ enable_aRFS() {
     fi
     #TODO: check if supported
     ssh "${SERVER}" "${prefix}sudo ethtool -K ${SERVER_NETDEV} ntuple off"
-    ssh "${SERVER}" "sudo bash -c 'echo 0 > /proc/sys/net/core/rps_sock_flow_entries'"
+    ssh "${SERVER}" "echo 0 | sudo tee /proc/sys/net/core/rps_sock_flow_entries > /dev/null"
 }
 
 enable_flow_stearing(){
