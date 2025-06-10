@@ -238,4 +238,4 @@ then
         done
     done
 fi
-delete_namespaces_from_host ${SERVER_TRUSTED} ${SERVER_DEVICES} ${DEVICES_NS}
+delete_namespaces_from_host ${SERVER_TRUSTED} ${DEVICES_NS[@]}

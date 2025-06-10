@@ -246,7 +246,8 @@ get_ips() {
 #return array of namespaces, "NGC_NA" if device was not in a namespace
 get_configured_namespaces() {
     HOST="$1"
-    DEVICES="$2"
+    shift
+    local  DEVICES=("$@")
     local i=0
     netns_list=$(ssh "${HOST}" "ip netns list | awk '{print \$1}'")
     for dev in "${DEVICES[@]}"
@@ -264,7 +265,6 @@ get_configured_namespaces() {
      done
      echo "${dev_ns_list[@]}"
 }
-
 #Return prefix to run on namespace context , or empty string if dev is not in namespace,
 #assuming DEVICES_NS are SERVER name spaces followed by client namespaces
 get_command_prefix(){
@@ -280,8 +280,9 @@ get_command_prefix(){
 #the new namespace will be ngc_ns_${TIME_STAMP}_${i}
 add_dev_to_namespace() {
     HOST=$1
-    HOST_DEVS=$2
-    INDEX=$3
+    INDEX=$2
+    shift 2
+    local HOST_DEVS=("$@")
     SERVER_NETDEV=("$(ssh "${HOST}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${HOST_DEVS[INDEX]}")")
     NEW_NS=ngc_ns_${TIME_STAMP}_${INDEX}
     NS_PREFIX="ip netns exec ${NEW_NS}"
@@ -298,8 +299,9 @@ add_dev_to_namespace() {
 #delete the namespaces we created
 delete_namespaces_from_host() {
     HOST=$1
-    HOST_DEVS=$2
-    DEVICES_NS=$3
+    HOST_DEVS=(${SERVER_DEVICES[@]})
+    shift
+    DEVICES_NS=("$@")
     #loop over name spaces and delete the once we created, and reset there IPs
     for ((i=0; i<${#HOST_DEVS[@]} ; i++))
     do
@@ -316,11 +318,10 @@ delete_namespaces_from_host() {
 
 manage_namespaces() {
     declare -g -a dev_ns_list
-    read -ra SERVER_NS <<< $(get_configured_namespaces $SERVER_TRUSTED $SERVER_DEVICES)
-    read -ra CLIENT_NS <<< $(get_configured_namespaces $CLIENT_TRUSTED $CLIENT_DEVICES)
+    read -ra SERVER_NS <<< $(get_configured_namespaces $SERVER_TRUSTED "${SERVER_DEVICES[@]}")
+    read -ra CLIENT_NS <<< $(get_configured_namespaces $CLIENT_TRUSTED "${CLIENT_DEVICES[@]}")
     DEVICES_NS=("${SERVER_NS[@]}" "${CLIENT_NS[@]}")
     get_ips_and_ifs
-
     #Check if we intend to run external loopback
     if [ ${CLIENT_TRUSTED} = ${SERVER_TRUSTED} ]
     then
@@ -330,7 +331,7 @@ manage_namespaces() {
          do
              if [ "${CLIENT_NS[i]}" = "${SERVER_NS[i]}" ]; then
                  #This mean that there is 2 interfaces under same namespace.
-                 SERVER_NS[i]=$(add_dev_to_namespace $SERVER_TRUSTED $SERVER_DEVICES $i)
+                 SERVER_NS[i]=$(add_dev_to_namespace $SERVER_TRUSTED $i "${SERVER_DEVICES[@]}")
              fi
          done
     #update array in case SERVER_NS changed
@@ -847,12 +848,12 @@ get_cores_for_devices(){
 
 get_min_channels(){
     server_prefix="$(get_command_prefix 0)"
-    min=$(ssh "${SERVER_TRUSTED}" "${server_prefix} ethtool -l ${SERVER_NETDEVS[0]} | awk -F: '/Combined/{print $2;exit;}' | grep -Eo '[0-9]+\$'")
+    min=$(ssh "${SERVER_TRUSTED}" "${server_prefix} ethtool -l ${SERVER_NETDEVS[0]} | awk -F: '/Combined/{print \$2;exit;}' | grep -Eo '[0-9]+'")
     i=0
     for dev in "${SERVER_NETDEVS[@]}"
     do
         server_prefix="$(get_command_prefix $i)"
-        tmp=$(ssh "${SERVER_TRUSTED}" "${server_prefix} ethtool -l ${dev} |  awk -F: '/Combined/{print $2;exit;}' | grep -Eo '[0-9]+\$'")
+        tmp=$(ssh "${SERVER_TRUSTED}" "${server_prefix} ethtool -l ${dev} | awk -F: '/Combined/{print \$2;exit;}' | grep -Eo '[0-9]+'")
         if [ $tmp -lt $min ]
         then
             min=$tmp
@@ -863,7 +864,7 @@ get_min_channels(){
     for dev in "${CLIENT_NETDEVS[@]}"
     do
         client_prefix="$(get_command_prefix $i)"
-        tmp=$(ssh "${CLIENT_TRUSTED}" "${client_prefix} ethtool -l ${dev} |  awk -F: '/Combined/{print $2;exit;}' | grep -Eo '[0-9]+\$'")
+        tmp=$(ssh "${CLIENT_TRUSTED}" "${client_prefix} ethtool -l ${dev} | awk -F: '/Combined/{print \$2; exit;}' | grep -Eo '[0-9]+'")
         if [ $tmp -lt $min ]
         then
             min=$tmp
@@ -913,10 +914,10 @@ enable_flow_stearing(){
     local index=$3
     local i
     local -a cmd_arr
-    server_ns_prefix=$(get_command_prefix ${i})
-    client_ns_prefix=$(get_command_prefix $((num_devs+i)))
     ssh "${CLIENT_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ${client_ns_prefix} ethtool -U ${CLIENT_NETDEV} delete \${j} &> /dev/null; done" || :
     ssh "${SERVER_TRUSTED}" "for ((j=0; j<100; j++)); do sudo ${server_ns_prefix} ethtool -U ${SERVER_NETDEV} delete \${j} &> /dev/null; done" || :
+    server_ns_prefix=$(get_command_prefix ${index})
+    client_ns_prefix=$(get_command_prefix $((num_devs+index)))
     log "done attempting to delete any existing rules, ethtool -U $SERVER_NETDEV delete "
     sleep 1
     for ((i=0; i < $NUM_INST; i++))
@@ -964,13 +965,13 @@ tune_tcp() {
     CHANNELS=$(($NUM_CORES_PER_DEVICE > 63 ? 63 : $NUM_CORES_PER_DEVICE))
     num_devs=${#SERVER_DEVICES[@]}
 
-    local i=0
-    for ((; i<num_devs; i++))
+    local di=0
+    for ((; di<num_devs; di++))
     do
-        server_netdev="${SERVER_NETDEVS[i]}"
-        client_netdev="${CLIENT_NETDEVS[i]}"
-        server_ns_prefix=$(get_command_prefix ${i})
-        client_ns_prefix=$(get_command_prefix $((num_devs+i)))
+        server_netdev="${SERVER_NETDEVS[di]}"
+        client_netdev="${CLIENT_NETDEVS[di]}"
+        server_ns_prefix=$(get_command_prefix ${di})
+        client_ns_prefix=$(get_command_prefix $((num_devs+di)))
         #Set number of channels to number of cores per process
         ssh "${SERVER_TRUSTED}" sudo ${server_ns_prefix} ethtool -L "${server_netdev}" combined "$CHANNELS"
         ssh "${CLIENT_TRUSTED}" sudo ${client_ns_prefix} ethtool -L "${client_netdev}" combined "$CHANNELS"
@@ -987,32 +988,32 @@ tune_tcp() {
             [ $DISABLE_RO = true ] && disable_pci_RO "${CLIENT_TRUSTED}" "${client_netdev}" ${client_ns_prefix}
         fi
 
-        NUM_CORES_AFFINITY=$((NUM_INST/2))
+        NUM_CORES_AFFINITY=$NUM_INST #$((NUM_INST/2))
         if [ "$DUPLEX"  = true ]
         then
-            NUM_CORES_AFFINITY=$NUM_INST
+            NUM_CORES_AFFINITY=$((NUM_INST/2))
         fi
         offset_c=$NUM_CORES_AFFINIT
 
-        s_core=$((i*NUM_CORES_PER_DEVICE + offset_c ))
+        s_core=$((di*NUM_CORES_PER_DEVICE + offset_c ))
         #indexes of cores for client side starts from the second half of the device.
-        c_core=$((i*NUM_CORES_PER_DEVICE +num_devs*NUM_CORES_PER_DEVICE + offset_c ))
+        c_core=$((di*NUM_CORES_PER_DEVICE +num_devs*NUM_CORES_PER_DEVICE + offset_c ))
 
         #add dummy core at the start since the first one is used to sync, this will allow us to have one
 
-        ssh "${SERVER_TRUSTED}" sudo ${server_ns_prefix} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[i]}" &> /dev/null
-        ssh "${CLIENT_TRUSTED}" sudo ${client_ns_prefix} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[i]}" &> /dev/null
-        log "Device ${SERVER_DEVICES[i]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
-        log "Device ${CLIENT_DEVICES[i]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
+        ssh "${SERVER_TRUSTED}" sudo ${server_ns_prefix} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")" "${SERVER_DEVICES[di]}" &> /dev/null
+        ssh "${CLIENT_TRUSTED}" sudo ${client_ns_prefix} set_irq_affinity_cpulist.sh "$(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")" "${CLIENT_DEVICES[di]}" &> /dev/null
+        log "Device ${SERVER_DEVICES[di]} in server side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:s_core:$((NUM_CORES_AFFINITY))}")"
+        log "Device ${CLIENT_DEVICES[di]} in client side core affinity is $(tr " " "," <<< "${CORES_ARRAY[@]:c_core:$((NUM_CORES_AFFINITY))}")"
         #Enable aRFS
         if [ ${LINK_TYPE} -eq 9 ]; then
             enable_aRFS "${SERVER_TRUSTED}" "${server_netdev} ${server_ns_prefix}"
             enable_aRFS "${CLIENT_TRUSTED}" "${client_netdev} ${client_ns_prefix}"
         fi
-        enable_flow_stearing $client_netdev $server_netdev $i
+        enable_flow_stearing $client_netdev $server_netdev $di
 
-        ssh "${SERVER_TRUSTED}" "sudo ${server_ns_prefix} ip l set ${server_netdev} down; sudo ${server_ns_prefix} ip l set ${server_netdev} up; sleep 1 ; sudo ${server_ns_prefix} ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${server_netdev}" || :
-        ssh "${CLIENT_TRUSTED}" "sudo ${client_ns_prefix} ip l set ${client_netdev} down; sudo ${client_ns_prefix} ip l set ${client_netdev} up; sleep 1 ; sudo ${client_ns_prefix} ip a add ${CLIENT_IPS[i]}/${CLIENT_IPS_MASK[i]} broadcast + dev ${client_netdev}" || :
+        ssh "${SERVER_TRUSTED}" "sudo ${server_ns_prefix} ip l set ${server_netdev} down; sudo ${server_ns_prefix} ip l set ${server_netdev} up; sleep 1 ; sudo ${server_ns_prefix} ip a add ${SERVER_IPS[di]}/${SERVER_IPS_MASK[di]} broadcast + dev ${server_netdev}" || :
+        ssh "${CLIENT_TRUSTED}" "sudo ${client_ns_prefix} ip l set ${client_netdev} down; sudo ${client_ns_prefix} ip l set ${client_netdev} up; sleep 1 ; sudo ${client_ns_prefix} ip a add ${CLIENT_IPS[di]}/${CLIENT_IPS_MASK[di]} broadcast + dev ${client_netdev}" || :
     done
 }
 
@@ -1021,8 +1022,8 @@ run_iperf_servers() {
     local -a cmd_arr
     for ((; dev_idx<NUM_DEVS; dev_idx++))
     do
-        server_ns_prefix=$(get_command_prefix ${i})
-        client_ns_prefix=$(get_command_prefix $((NUM_DEVS+i)))
+        server_ns_prefix=$(get_command_prefix ${dev_idx})
+        client_ns_prefix=$(get_command_prefix $((NUM_DEVS+dev_idx)))
         local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE ))
         for i in $(seq 0 $((NUM_INST-1))); do
             sleep 0.1
@@ -1466,7 +1467,7 @@ collect_BW() {
         [[ "$IS_CLIENT_SPR" = "true" ]] && log "Client side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro" WARNING
         [[ "$IS_SERVER_SPR" = "true" ]] && log "Server side has Sapphire Rapid CPU, Make sure BIOS has the following fix : Socket Configuration > IIO Configuration > Socket# Configuration > PE# Restore RO Write Perf > Enabled , if not please re-run with flag --disable_ro" WARNING
         log "Failed - servers failed ngc_tcp_test with the given HCAs" RESULT_FAIL
-        delete_namespaces_from_host ${SERVER_TRUSTED} ${SERVER_DEVICES} ${DEVICES_NS}
+        delete_namespaces_from_host ${SERVER_TRUSTED} ${DEVICES_NS[@]}
         return 1
     else
         log "Passed - servers passed ngc_tcp_test with the given HCAs" RESULT_PASS
