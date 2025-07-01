@@ -25,6 +25,10 @@ Firstly, generate a passwordless SSH key (_e.g._ using `ssh-keygen`) and copy it
         ```
         %sudo ALL=(ALL) ALL, NOPASSWD: /usr/sbin/ip,/opt/mellanox/iproute2/sbin/ip,/usr/bin/mlxprivhost,/usr/bin/mst,/usr/bin/systemctl restart openvswitch-switch.service,/usr/bin/systemctl stop irqbalance.service,/usr/sbin/ethtool,/usr/sbin/set_irq_affinity_cpulist.sh,/usr/bin/tee /sys/class/net/*,/usr/bin/tee /proc/sys/net/core/rps_sock_flow_entries,/usr/bin/numactl,/usr/bin/awk,/usr/bin/taskset,/usr/bin/setpci,/usr/bin/rm -f /tmp/*
         ```
+    * Make sure to add the following line to your sudoers file:
+        ```
+        Defaults  env_keep += "CUDA_DEVICE_ORDER"
+        ```
 
 ## RDMA test
 
