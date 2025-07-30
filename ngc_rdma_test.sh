@@ -87,6 +87,14 @@ do
             TEST_DURATION="${1#*=}"
             shift
             ;;
+        --use-null-mr)
+            null_mr="--use-null-mr"
+            shift
+            ;;
+        --post_list=*)
+            post_list="--post_list=${1#*=}"
+            shift
+            ;;
         --ipsec)
             IPSEC=true
             shift
@@ -152,6 +160,8 @@ Options:
 	--bw_message_size_list=<list of message sizes>: Use this flag to provide a comma separated message size list to run bw tests (default: 65536)
 	--lat_message_size_list=<list of message sizes>: Use this flag to provide a comma separated message size list to run latency tests (default: 2)
 	--unidir: Run in unidir (default: bidir)
+	--use-null-mr: Allocate a null memory region for the client with ibv_alloc_null_mr
+	--post_list=<list size>: Post list of receive WQEs of <list size> size (instead of single post)
 	--ipsec: Enable IPsec packet offload (full-offload) on the Arm cores.
 	--sd: Enable Socket Direct support. The SD should be added after the device (see example below).
 	--allow_gpu_node_relation: Allow 'node' relation between GPU and NIC (connection traversing PCIe as well as the interconnect between PCIe host bridges within a NUMA node). This may result in lower performance, so use only if necessary. Use 'nvidia-smi topo -mp' to see all the available relations on the system.
