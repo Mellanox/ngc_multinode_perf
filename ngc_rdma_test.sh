@@ -18,6 +18,8 @@ server_cuda=""
 client_cuda=""
 ALLOW_CORE_ZERO=false
 ALLOW_GPU_NODE_RELATION=false
+null_mr=false
+post_list_value=""
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
@@ -49,6 +51,14 @@ do
             ;;
         --use_data_direct)
             datadirect="--use_data_direct"
+            shift
+            ;;
+        --use-null-mr)
+            null_mr=true
+            shift
+            ;;
+        --post_list=*)
+            post_list_value="--post_list=${1#*=}"
             shift
             ;;
         --all_connection_types)
@@ -144,6 +154,8 @@ Options:
 	--client_cuda=<cuda device index>: Use the specified cuda device
 	--use_cuda_dmabuf: Use CUDA DMA-BUF for GPUDirect RDMA testing
 	--use_data_direct: Use mlx5dv_reg_dmabuf_mr verb
+	--use-null-mr: Allocate a null memory region for the client with ibv_alloc_null_mr
+	--post_list=<list size>: Post list of receive WQEs of <list size> size (instead of single post)
 	--qp=<num of QPs>: Use the sepecified QPs' number (default: 4 QPs per device, max: ${max_qps})
 	--all_connection_types: check all the supported connection types for each test, or:
 	--conn=<list of connection types>: Use this flag to provide a comma-separated list of connection types without spaces.
@@ -189,6 +201,9 @@ then
 fi
 
 [ -n "${TEST_DURATION}" ] || TEST_DURATION="30"
+
+# Export post_list_value to be available in common.sh functions
+export post_list_value
 
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
 if [ -n "${user_qps}" ]; then

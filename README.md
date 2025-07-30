@@ -50,6 +50,8 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     [--client_cuda=<cuda_device>] \
     [--unidir] \
     [--sd] \
+    [--use-null-mr] \
+    [--post_list=<list size>] \
     [--allow_gpu_node_relation] \
     [--ipsec <list of DPU clients> <list of PFs associated to list of DPU clients> \
     <list of DPU servers> <list of PFs associated to list of DPU servers>]
