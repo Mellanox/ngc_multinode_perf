@@ -18,8 +18,6 @@ server_cuda=""
 client_cuda=""
 ALLOW_CORE_ZERO=false
 ALLOW_GPU_NODE_RELATION=false
-null_mr=false
-post_list_value=""
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
@@ -201,7 +199,6 @@ then
 fi
 
 [ -n "${TEST_DURATION}" ] || TEST_DURATION="30"
-
 
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
 if [ -n "${user_qps}" ]; then
