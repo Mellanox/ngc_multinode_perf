@@ -1151,9 +1151,7 @@ run_perftest_servers() {
         [ "${null_mr}" = true ] && null_mr_flag="--use-null-mr" || null_mr_flag=""
         cmd_arr=("sudo" "${cuda_order}" "taskset" "-c" "${core}" "${TEST}" "-d" "${SERVER_DEVICES[dev_idx]}"
                  "-s" "${message_size}" "-D" "${TEST_DURATION}" "-p" "${prt}" "-F"
-                 "${conn_type_cmd[*]}" "${server_cuda}" "${dmabuf}" "${datadirect}" "${null_mr_flag}")
-        [ -n "${post_list_value}" ] && cmd_arr+=("${post_list_value}")
-        cmd_arr+=("${extra_server_args_str}")
+                 "${conn_type_cmd[*]}" "${server_cuda}" "${dmabuf}" "${datadirect}" "${null_mr}" "${post_list}" "${extra_server_args_str}")
         ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} >> /dev/null &" &
         log "run ${TEST} server on ${SERVER_TRUSTED#*@}: ${cmd_arr[*]}"
     done
@@ -1185,9 +1183,7 @@ run_perftest_clients() {
         [ "${null_mr}" = true ] && null_mr_flag="--use-null-mr" || null_mr_flag=""
         cmd_arr=("sudo" "${cuda_order}" "taskset" "-c" "${core}" "${TEST}" "-d" "${CLIENT_DEVICES[dev_idx]}"
                  "-D" "${TEST_DURATION}" "${SERVER_TRUSTED#*@}" "-s" "${message_size}" "-p" "${prt}"
-                 "-F" "${conn_type_cmd[*]}" "${client_cuda}" "${dmabuf}" "${datadirect}" "${null_mr_flag}")
-        [ -n "${post_list_value}" ] && cmd_arr+=("${post_list_value}")
-        cmd_arr+=("${extra_client_args_str}" "--out_json"
+                 "-F" "${conn_type_cmd[*]}" "${client_cuda}" "${dmabuf}" "${datadirect}" "${null_mr}" "${post_list}" "${extra_client_args_str}" "--out_json"
                  "--out_json_file=/tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json"
                  "&")
         ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]}" & declare ${bg_pid}=$!

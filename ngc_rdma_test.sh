@@ -54,11 +54,11 @@ do
             shift
             ;;
         --use-null-mr)
-            null_mr=true
+            null_mr="--use-null-mr"
             shift
             ;;
         --post_list=*)
-            post_list_value="--post_list=${1#*=}"
+            post_list="--post_list=${1#*=}"
             shift
             ;;
         --all_connection_types)
@@ -202,8 +202,6 @@ fi
 
 [ -n "${TEST_DURATION}" ] || TEST_DURATION="30"
 
-# Export post_list_value to be available in common.sh functions
-export post_list_value
 
 NUM_CONNECTIONS=${#CLIENT_DEVICES[@]}
 if [ -n "${user_qps}" ]; then
