@@ -18,6 +18,7 @@ server_cuda=""
 client_cuda=""
 ALLOW_CORE_ZERO=false
 ALLOW_GPU_NODE_RELATION=false
+AUTO_GPUS_PER_DEVICE=0  # 0 means not set, >0 means auto-select N GPUs per device
 
 scriptdir="$(dirname "$0")"
 source "${scriptdir}/common.sh"
@@ -99,9 +100,15 @@ do
             IPSEC=true
             shift
             ;;
+        --auto_gpus_per_device=*)
+            [ "${RUN_WITH_CUDA}" = true ] || fatal "--auto_gpus_per_device can only be used with --use_cuda"
+            AUTO_GPUS_PER_DEVICE="${1#*=}"
+            shift
+            ;;
         --allow_gpu_node_relation)
             [ "${RUN_WITH_CUDA}" = true ] || fatal "--allow_gpu_node_relation can only be used with --use_cuda"
-            ALLOW_GPU_NODE_RELATION=true
+            log "WARNING: --allow_gpu_node_relation is deprecated. Use --auto_gpus_per_device=1 instead." "WARNING"
+            AUTO_GPUS_PER_DEVICE=1  # Equivalent behavior (ALLOW_GPU_NODE_RELATION will be set later)
             shift
             ;;
         --*)
@@ -114,6 +121,23 @@ do
     esac
 done
 set -- "${POSITIONAL_ARGS[@]}"
+
+# Validate and configure GPU auto-allocation
+if [ "$RUN_WITH_CUDA" = true ] && [ "$AUTO_GPUS_PER_DEVICE" -gt 0 ]; then
+    # Validate AUTO_GPUS_PER_DEVICE is a positive integer
+    if ! [[ "$AUTO_GPUS_PER_DEVICE" =~ ^[1-9][0-9]*$ ]]; then
+        fatal "Invalid --auto_gpus_per_device value: '$AUTO_GPUS_PER_DEVICE'. Must be a positive integer greater than 0."
+    fi
+    
+    # Check mutual exclusivity with manual CUDA specification
+    if [ ${#server_cuda_idx[@]} -gt 0 ] || [ ${#client_cuda_idx[@]} -gt 0 ]; then
+        fatal "--auto_gpus_per_device is mutually exclusive with manual CUDA device specification (--server_cuda, --client_cuda)"
+    fi
+    
+    # Enable NODE relations for GPU auto-allocation (required for topology-aware allocation)
+    # This is the internal flag used by common.sh for GPU-NIC pairing logic
+    ALLOW_GPU_NODE_RELATION=true
+fi
 
 IMPLEMENTED_TESTS=("ib_write_bw" "ib_read_bw" "ib_send_bw" "ib_write_lat" "ib_read_lat" "ib_send_lat")
 # loop over TESTS and fatal if there is a test that is not implemented
@@ -144,12 +168,19 @@ Run RDMA test
 * Passwordless sudo root access is required from the SSH'ing user.
 * Dependencies which need to be installed: numctl, perftest.
 
-Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [--tests=<list of ib perftests>] [--duration=<time in seconds>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd] [--allow_gpu_node_relation]
+Syntax: $0 [<client username>@]<client hostname> <client ib device1>[,<client ib device2>,...] [<server username>@]<server hostname> <server ib device1>[,<server ib device2>,...] [--use_cuda] [--auto_gpus_per_device=<N>] [--qp=<num of QPs>] [--all_connection_types | --conn=<list of connection types>] [--tests=<list of ib perftests>] [--duration=<time in seconds>] [--message-size-list=<list of message sizes>] [--ipsec] [--sd] [--allow_gpu_node_relation]
 
 Options:
-	--use_cuda: add this flag to run BW perftest benchamrks on GPUs
-	--server_cuda=<cuda device index>: Use the specified cuda device
-	--client_cuda=<cuda device index>: Use the specified cuda device
+	--use_cuda: add this flag to run BW perftest benchamrks on GPUs (automatically allocates optimal GPUs to each device)
+	--auto_gpus_per_device=<N>: Automatically allocate N GPUs per device (1=single GPU like --allow_gpu_node_relation, 2+=multiple GPUs per device with result aggregation). Mutually exclusive with manual CUDA specification.
+	--server_cuda=<cuda device index>: Manually specify cuda device(s) for server (comma-separated for multiple devices)
+	--client_cuda=<cuda device index>: Manually specify cuda device(s) for client (comma-separated for multiple devices)
+	
+	GPU Allocation Notes:
+	- GPU count must be a multiple of device count for even distribution
+	- Examples: 1 device + 2 GPUs = 2 tests; 2 devices + 4 GPUs = 2 tests each; 2 devices + 6 GPUs = 3 tests each
+	- Invalid: 2 devices + 3 GPUs (uneven distribution)
+	- Result aggregation: Multiple tests on same device automatically aggregate results for validation
 	--use_cuda_dmabuf: Use CUDA DMA-BUF for GPUDirect RDMA testing
 	--use_data_direct: Use mlx5dv_reg_dmabuf_mr verb
 	--qp=<num of QPs>: Use the sepecified QPs' number (default: 4 QPs per device, max: ${max_qps})
@@ -164,16 +195,45 @@ Options:
 	--post_list=<list size>: Post list of receive WQEs of <list size> size (instead of single post)
 	--ipsec: Enable IPsec packet offload (full-offload) on the Arm cores.
 	--sd: Enable Socket Direct support. The SD should be added after the device (see example below).
-	--allow_gpu_node_relation: Allow 'node' relation between GPU and NIC (connection traversing PCIe as well as the interconnect between PCIe host bridges within a NUMA node). This may result in lower performance, so use only if necessary. Use 'nvidia-smi topo -mp' to see all the available relations on the system.
+	--allow_gpu_node_relation: [DEPRECATED] Allow 'node' relation between GPU and NIC. Use --auto_gpus_per_device=1 instead. This may result in lower performance, so use only if necessary. Use 'nvidia-smi topo -mp' to see all the available relations on the system.
 
 Please note that when running 2 devices on each side we expect dual-port performance.
 
-Example:(Run on 2 ports)
-$0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
-Example:(Pick 3 connection types, single port)
-$0 client mlx5_0 server mlx5_3 --conn=UC,UD,DC
-Example: (Run on 2 ports with Socket Direct)
-$0 client mlx5_0,mlx5_1,mlx5_4,mlx5_5 server mlx5_0,mlx5_1,mlx5_4,mlx5_5 --sd
+Examples:
+Run on 2 ports:
+	$0 client mlx5_0,mlx5_1 server mlx5_3,mlx5_4
+	
+Pick 3 connection types, single port:
+	$0 client mlx5_0 server mlx5_3 --conn=UC,UD,DC
+	
+Run on 2 ports with Socket Direct:
+	$0 client mlx5_0,mlx5_1,mlx5_4,mlx5_5 server mlx5_0,mlx5_1,mlx5_4,mlx5_5 --sd
+	
+Run with CUDA (automatic GPU allocation):
+	$0 client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda
+	
+Run with manual GPU assignment:
+	$0 client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda --server_cuda=0,1 --client_cuda=2,3
+
+Multi-GPU examples:
+Single device with multiple GPUs (2 parallel tests, results aggregated per device):
+	$0 client mlx5_0 server mlx5_0 --use_cuda --server_cuda=0,1 --client_cuda=0,1
+
+Multiple devices with multiple GPUs (4 parallel tests total, 2 per device, aggregated per device):
+	$0 client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda --server_cuda=0,1,2,3 --client_cuda=0,1,2,3
+	
+Invalid example (uneven distribution):
+	# $0 client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda --server_cuda=0,1,2  # ERROR: 3 GPUs / 2 devices
+
+Auto GPU allocation examples:
+Single device with auto-selected single GPU (equivalent to --allow_gpu_node_relation):
+	$0 client mlx5_0 server mlx5_0 --use_cuda --auto_gpus_per_device=1
+
+Single device with auto-selected 2 GPUs (2 parallel tests, results aggregated):
+	$0 client mlx5_0 server mlx5_0 --use_cuda --auto_gpus_per_device=2
+
+Multiple devices with auto-selected 2 GPUs each (4 parallel tests total):
+	$0 client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda --auto_gpus_per_device=2
 
 EOF
 }
@@ -221,6 +281,39 @@ fi
 NUM_DEVS=${#SERVER_DEVICES[@]}
 NUM_BF_DEVS=${#LOCAL_BF[@]}
 
+# Calculate the number of parallel tests to run
+calculate_test_count() {
+    local max_tests=$NUM_DEVS
+    
+    if [ "$RUN_WITH_CUDA" = true ]; then
+        # Handle auto GPU allocation per device
+        if [ "$AUTO_GPUS_PER_DEVICE" -gt 0 ]; then
+            max_tests=$(( $NUM_DEVS * $AUTO_GPUS_PER_DEVICE ))
+            log "Auto GPU allocation: $AUTO_GPUS_PER_DEVICE GPUs per device, $max_tests total parallel tests"
+        
+        # Handle manual GPU specification - must be evenly divisible by device count  
+        elif [ ${#server_cuda_idx[@]} -gt 0 ] || [ ${#client_cuda_idx[@]} -gt 0 ]; then
+            if [ ${#server_cuda_idx[@]} -gt 0 ]; then
+                if [ $(( ${#server_cuda_idx[@]} % $NUM_DEVS )) -ne 0 ]; then
+                    fatal "Invalid configuration: ${#server_cuda_idx[@]} server CUDA devices cannot be evenly distributed across $NUM_DEVS network devices. GPU count must be a multiple of device count."
+                fi
+                max_tests=$(( ${#server_cuda_idx[@]} > max_tests ? ${#server_cuda_idx[@]} : max_tests ))
+            fi
+            if [ ${#client_cuda_idx[@]} -gt 0 ]; then
+                if [ $(( ${#client_cuda_idx[@]} % $NUM_DEVS )) -ne 0 ]; then
+                    fatal "Invalid configuration: ${#client_cuda_idx[@]} client CUDA devices cannot be evenly distributed across $NUM_DEVS network devices. GPU count must be a multiple of device count."
+                fi
+                max_tests=$(( ${#client_cuda_idx[@]} > max_tests ? ${#client_cuda_idx[@]} : max_tests ))
+            fi
+        fi
+    fi
+    
+    echo $max_tests
+}
+
+NUM_TESTS=$(calculate_test_count)
+log "Will run $NUM_TESTS parallel tests (devices: $NUM_DEVS)"
+
 #init the arrays SERVER_NETDEVS,CLIENT_NETDEVS
 get_netdevs
 
@@ -229,7 +322,7 @@ min_l=$(get_min_channels)
 opt_proc=$((min_l<MAX_PROC ? min_l : MAX_PROC))
 
 read -ra CORES_ARRAY <<< $(get_cores_for_devices $1 $2 $3 $4 $((opt_proc+2)))
-NUM_CORES_PER_DEVICE=$(( ${#CORES_ARRAY[@]}/(${#CLIENT_DEVICES[@]}*2) ))
+NUM_CORES_PER_DEVICE=$(( ${#CORES_ARRAY[@]}/(${NUM_TESTS}*2) ))
 NUM_INST=${NUM_CORES_PER_DEVICE}
 
 # validate CONN_TYPES input before start of run
@@ -291,6 +384,12 @@ then
 fi
 
 #---------------------Run Benchmark--------------------
+
+# Clear GPU allocation tracking for this test run (enables automatic GPU distribution)
+if [ "$RUN_WITH_CUDA" = true ]; then
+    clear_gpu_allocations
+fi
+
 logstring=( "" "" "" "for" "devices:" "${SERVER_DEVICES[*]}" "<->" "${CLIENT_DEVICES[*]}")
 for TEST in "${TESTS[@]}"; do
     logstring[0]="${TEST}"

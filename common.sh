@@ -10,6 +10,17 @@ ORANGE='\033[1;33m'
 RED='\033[1;31m'
 NC='\033[0m'
 
+
+# Function to declare and clear GPU allocation tracking (called at start of each test run)
+clear_gpu_allocations() {
+    for ((i=0; i<NUM_DEVS; i++)); do
+        declare -ga "ALLOCATED_SERVER_DEVICE_${i}_GPUS=()"
+        declare -ga "ALLOCATED_CLIENT_DEVICE_${i}_GPUS=()"
+    done
+    
+    log "Cleared GPU allocation tracking for new test run (${NUM_DEVS} devices)"
+}
+
 log() {
     local line prefix prio out color
     line="${1}"
@@ -561,18 +572,36 @@ find_cuda() {
     SERVER_TRUSTED=$1
     NICX=$2
     RELATION=$3
+    EXCLUDED_GPUS="${4:-}"  # Optional: comma-separated list of excluded GPU indices
+    
     CUDA_INDEX=-1
     LINE=$(ssh "${SERVER_TRUSTED}" "nvidia-smi topo -mp" | grep -w "^${NICX}" | grep "${RELATION}" )
     RES=""
+    
+    # Convert excluded list to array for easy checking
+    IFS=',' read -ra excluded_array <<< "$EXCLUDED_GPUS"
+    
     for RL in $LINE
     do
        if [ "$RL" = "$RELATION" ]
           then
-          if  [ "$RES" = "" ]
-          then
-             RES="$CUDA_INDEX"
-          else
-             RES="${RES},$CUDA_INDEX"
+          # Check if this GPU is already allocated
+          gpu_excluded=false
+          for excluded_gpu in "${excluded_array[@]}"; do
+              if [ "$CUDA_INDEX" = "$excluded_gpu" ]; then
+                  gpu_excluded=true
+                  break
+              fi
+          done
+          
+          # Only add if not excluded
+          if [ "$gpu_excluded" = false ]; then
+              if  [ "$RES" = "" ]
+              then
+                 RES="$CUDA_INDEX"
+              else
+                 RES="${RES},$CUDA_INDEX"
+              fi
           fi
        fi
        CUDA_INDEX=$((CUDA_INDEX+1))
@@ -594,6 +623,8 @@ get_cudas_per_rdma_device() {
     SERVER_TRUSTED="${1}"
     RDMA_DEVICE="$2"
     USER_DEF_CUDA="${3}"
+    EXCLUDED_GPUS="${4:-}"  # Optional: comma-separated list of excluded GPU indices
+    
     if [ -n "${USER_DEF_CUDA}" ]; then
         echo "${USER_DEF_CUDA}"
         return
@@ -617,7 +648,7 @@ get_cudas_per_rdma_device() {
     [ "${ALLOW_GPU_NODE_RELATION}" != true ] || node_relations+=( "NODE" )
     for RELATION in "${node_relations[@]}"
     do
-        find_cuda "$SERVER_TRUSTED" "$NICX" "$RELATION"
+        find_cuda "$SERVER_TRUSTED" "$NICX" "$RELATION" "$EXCLUDED_GPUS"
     done
     exit 1
 }
@@ -1131,24 +1162,27 @@ default_qps_optimization() {
 }
 
 run_perftest_servers() {
-    local dev_idx=0
+    local test_idx=0
     local -a cmd_arr
     local extra_server_args_str
-    for ((; dev_idx<NUM_DEVS; dev_idx++))
+    for ((; test_idx<NUM_TESTS; test_idx++))
     do
-        local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE ))
+        # Map test index to device index (cycle through devices)
+        local dev_idx=$((test_idx % NUM_DEVS))
+        local device="${SERVER_DEVICES[dev_idx]}"
+        
+        local OFFSET_S=$((test_idx*NUM_CORES_PER_DEVICE ))
         sleep 0.1
         index=$((OFFSET_S))
         core="${CORES_ARRAY[index]}"
-        prt=$((BASE_RDMA_PORT + dev_idx ))
-        if [ $RUN_WITH_CUDA ]
-            then
-            CUDA_INDEX=$(get_cudas_per_rdma_device "${SERVER_TRUSTED}" "${SERVER_DEVICES[dev_idx]}" "${server_cuda_idx[dev_idx]}" | cut -d , -f 1)
-            server_cuda="--use_cuda=${CUDA_INDEX}"
-            cuda_order="CUDA_DEVICE_ORDER=PCI_BUS_ID"
-            fi
+        prt=$((BASE_RDMA_PORT + test_idx ))
+        
+        # Allocate GPU for this test if CUDA is enabled
+        allocate_gpu_for_test "server" $test_idx "$device"
+            
         extra_server_args_str="${extra_server_args[*]//%%QPS%%/${server_QPS[dev_idx]}}"
-        cmd_arr=("sudo" "${cuda_order}" "taskset" "-c" "${core}" "${TEST}" "-d" "${SERVER_DEVICES[dev_idx]}"
+      
+        cmd_arr=("sudo" "${cuda_order}" "taskset" "-c" "${core}" "${TEST}" "-d" "$device"
                  "-s" "${message_size}" "-D" "${TEST_DURATION}" "-p" "${prt}" "-F"
                  "${conn_type_cmd[*]}" "${server_cuda}" "${dmabuf}" "${datadirect}" "${null_mr}" "${post_list}" "${extra_server_args_str}")
         ssh "${SERVER_TRUSTED}" "${cmd_arr[*]} >> /dev/null &" &
@@ -1157,45 +1191,125 @@ run_perftest_servers() {
 }
 
 run_perftest_clients() {
-    local bg_pid
-    local -a cmd_arr
+    local bg_pid="bg_pid"
+    local -a cmd_arr=()
     local extra_client_args_str
-    local dev_idx=0
+    local test_idx=0
     [ "${RDMA_UNIDIR}" = true ] && multiplier=1 || multiplier=2
-    for ((; dev_idx<NUM_DEVS; dev_idx++))
+    for ((; test_idx<NUM_TESTS; test_idx++))
     do
-        local OFFSET_S=$((dev_idx*NUM_CORES_PER_DEVICE + NUM_DEVS*NUM_CORES_PER_DEVICE + DUPLEX_OFFSET))
-        bg_pid="bg_pid_$dev_idx"
+        # Map test index to device index (cycle through devices)
+        local dev_idx=$((test_idx % NUM_DEVS))
+        
+        local OFFSET_S=$((test_idx*NUM_CORES_PER_DEVICE + NUM_TESTS*NUM_CORES_PER_DEVICE + DUPLEX_OFFSET))
         sleep 0.1
         index=$((OFFSET_S))
         core="${CORES_ARRAY[index]}"
-        dev_base_port=$((BASE_RDMA_PORT + dev_idx))
+        dev_base_port=$((BASE_RDMA_PORT + test_idx))
         prt=$((dev_base_port))
-        if [ $RUN_WITH_CUDA ]
-            then
-            CUDA_INDEX=$(get_cudas_per_rdma_device "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}" "${client_cuda_idx[dev_idx]}" | cut -d , -f 1)
-            client_cuda="--use_cuda=${CUDA_INDEX}"
-            cuda_order="CUDA_DEVICE_ORDER=PCI_BUS_ID"
-            fi
+        
+        # Allocate GPU for this test if CUDA is enabled
+        allocate_gpu_for_test "client" $test_idx "${CLIENT_DEVICES[dev_idx]}"
+            
+        # Map server IP by device index
         ip_i=${SERVER_IPS[dev_idx]}
         extra_client_args_str="${extra_client_args[*]//%%QPS%%/${client_QPS[dev_idx]}}"
-        cmd_arr=("sudo" "${cuda_order}" "taskset" "-c" "${core}" "${TEST}" "-d" "${CLIENT_DEVICES[dev_idx]}"
+        cmd_arr+=("sudo" "${cuda_order}" "taskset" "-c" "${core}" "${TEST}" "-d" "${CLIENT_DEVICES[dev_idx]}"
                  "-D" "${TEST_DURATION}" "${SERVER_TRUSTED#*@}" "-s" "${message_size}" "-p" "${prt}"
                  "-F" "${conn_type_cmd[*]}" "${client_cuda}" "${dmabuf}" "${datadirect}" "${null_mr}" "${post_list}"
                  "${extra_client_args_str}" "--out_json"
-                 "--out_json_file=/tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json"
+                 "--out_json_file=/tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}_test${test_idx}.json"
                  "&")
-        ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]}" & declare ${bg_pid}=$!
-        log "run ${TEST} client on ${CLIENT_TRUSTED#*@}: ${cmd_arr[*]}"
     done
-    for ((dev_idx=$NUM_DEVS-1; dev_idx>=0; dev_idx--)); do
-        bg_pid="bg_pid_$dev_idx"
-        wait "${!bg_pid}"
-    done
+    ssh "${CLIENT_TRUSTED}" "${cmd_arr[*]}" & declare ${bg_pid}=$!
+    log "run ${TEST} client on ${CLIENT_TRUSTED#*@}: ${cmd_arr[*]}"
+    wait "${bg_pid}"
+    validate_test_results ${multiplier}
+}
+
+# Wrapper function to choose validation strategy based on test configuration
+validate_test_results() {
+    local multiplier=$1
+    
+    # Check if we should aggregate results per device (multi-GPU per device)
+    if [[ $NUM_TESTS -gt $NUM_DEVS ]] && [[ "${SD}" != true ]]; then
+        validate_aggregated_device_results ${multiplier}
+    else
+        validate_individual_test_results ${multiplier}
+    fi
+}
+
+# Validate results by aggregating per device (multi-GPU scenarios)
+validate_aggregated_device_results() {
+    local multiplier=$1
+    
     if [ "${bw_test}" = "true" ]
     then
         for ((dev_idx=0; dev_idx<NUM_DEVS; dev_idx++))
         do
+            port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}")
+            BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", ${multiplier}*0.9*${port_rate}}")"
+            total_bw=0
+            test_count=0
+            
+            # Sum bandwidth from all tests on this device
+            for ((test_idx=0; test_idx<NUM_TESTS; test_idx++)); do
+                if [[ $((test_idx % NUM_DEVS)) -eq $dev_idx ]]; then
+                    BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}_test${test_idx}.json | cut -d. -f1 | xargs")
+                    check_if_number "${BW}" || PASS=false
+                    total_bw=$((total_bw + BW))
+                    test_count=$((test_count + 1))
+                    log "  Test ${test_idx} on device ${CLIENT_DEVICES[dev_idx]}: ${BW} Gb/s"
+                fi
+            done
+            
+            log "Device ${CLIENT_DEVICES[dev_idx]} aggregate: ${total_bw} Gb/s from ${test_count} parallel tests (max possible: $((port_rate * multiplier)) Gb/s)"
+            if [[ ${total_bw} -lt ${BW_PASS_RATE} ]]
+            then
+                log "Device ${CLIENT_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
+                PASS=false
+            fi
+        done
+    else
+        for ((dev_idx=0; dev_idx<NUM_DEVS; dev_idx++))
+        do
+            grep -q 'send\|write' <<<"${TEST}" && LAT_PASS_VAL='2.5'
+            grep -q 'read' <<<"${TEST}" && LAT_PASS_VAL='4.5'
+            min_lat=999999
+            test_count=0
+            
+            # Find minimum latency from all tests on this device
+            for ((test_idx=0; test_idx<NUM_TESTS; test_idx++)); do
+                if [[ $((test_idx % NUM_DEVS)) -eq $dev_idx ]]; then
+                    LAT_VAL="$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/t_avg/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}_test${test_idx}.json | xargs")"
+                    check_if_number "${LAT_VAL}" || PASS=false
+                    test_count=$((test_count + 1))
+                    log "  Test ${test_idx} on device ${CLIENT_DEVICES[dev_idx]}: ${LAT_VAL} μs"
+                    if awk "BEGIN {exit !(${LAT_VAL} < ${min_lat})}"; then
+                        min_lat="${LAT_VAL}"
+                    fi
+                fi
+            done
+            
+            log "Device ${CLIENT_DEVICES[dev_idx]} best latency: ${min_lat} μs from ${test_count} parallel tests"
+            if awk "BEGIN {exit !(${min_lat} > ${LAT_PASS_VAL})}"
+            then
+                log "Device ${CLIENT_DEVICES[dev_idx]} didn't achieve latency of ${LAT_PASS_VAL} μs."
+                PASS=false
+            fi
+        done
+    fi
+}
+
+# Validate results individually per test (traditional approach)
+validate_individual_test_results() {
+    local multiplier=$1
+    
+    if [ "${bw_test}" = "true" ]
+    then
+        for ((test_idx=0; test_idx<NUM_TESTS; test_idx++))
+        do
+            dev_idx=$((test_idx % NUM_DEVS))
             port_rate=$(get_port_rate "${CLIENT_TRUSTED}" "${CLIENT_DEVICES[dev_idx]}")
             BW_PASS_RATE="$(awk "BEGIN {printf \"%.0f\n\", ${multiplier}*0.9*${port_rate}}")"
             # Check if the device is using Socket Direct
@@ -1212,29 +1326,70 @@ run_perftest_clients() {
                     continue
                 fi
             fi
-            BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json | cut -d. -f1 | xargs")
+            
+            BW=$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/BW_average/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}_test${test_idx}.json | cut -d. -f1 | xargs")
             check_if_number "${BW}" || PASS=false
-            log "Device ${CLIENT_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * multiplier)) Gb/s)"
+            log "Test ${test_idx} on device ${CLIENT_DEVICES[dev_idx]} reached ${BW} Gb/s (max possible: $((port_rate * multiplier)) Gb/s)"
             if [[ ${BW} -lt ${BW_PASS_RATE} ]]
             then
-                log "Device ${CLIENT_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
+                log "Test ${test_idx} on device ${CLIENT_DEVICES[dev_idx]} didn't reach pass bw rate of ${BW_PASS_RATE} Gb/s"
                 PASS=false
             fi
         done
     else
-        for ((dev_idx=0; dev_idx<NUM_DEVS; dev_idx++))
+        for ((test_idx=0; test_idx<NUM_TESTS; test_idx++))
         do
+            dev_idx=$((test_idx % NUM_DEVS))
             grep -q 'send\|write' <<<"${TEST}" && LAT_PASS_VAL='2.5'
             grep -q 'read' <<<"${TEST}" && LAT_PASS_VAL='4.5'
-            LAT_VAL="$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/t_avg/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}.json | xargs")"
+            LAT_VAL="$(ssh "${CLIENT_TRUSTED}" "sudo awk -F'[:,]' '/t_avg/{print \$2}' /tmp/perftest_${TEST}_${CLIENT_DEVICES[dev_idx]}_test${test_idx}.json | xargs")"
             check_if_number "${LAT_VAL}" || PASS=false
-            log "Device ${CLIENT_DEVICES[dev_idx]} avg. latency: ${LAT_VAL} μs."
+            log "Test ${test_idx} on device ${CLIENT_DEVICES[dev_idx]} avg. latency: ${LAT_VAL} μs."
             if awk "BEGIN {exit !(${LAT_VAL} > ${LAT_PASS_VAL})}"
             then
-                log "Device ${CLIENT_DEVICES[dev_idx]} didn't achieve latengy of ${LAT_PASS_VAL} μs."
+                log "Test ${test_idx} on device ${CLIENT_DEVICES[dev_idx]} didn't achieve latency of ${LAT_PASS_VAL} μs."
                 PASS=false
             fi
         done
+    fi
+}
+
+# Unified GPU allocation function for both server and client tests
+allocate_gpu_for_test() {
+    local side="$1"       # "server" or "client"
+    local test_idx="$2"
+    local device="$3"
+    local device_idx=$((test_idx % NUM_DEVS))
+    
+    if [ $RUN_WITH_CUDA ]; then
+        # Set side-specific variables using indirect references
+        local -n device_allocated_gpus_ref="ALLOCATED_${side^^}_DEVICE_${device_idx}_GPUS"
+        local -n cuda_idx_ref="${side}_cuda_idx"                # server_cuda_idx or client_cuda_idx
+        local trusted_host_var="${side^^}_TRUSTED"              # SERVER_TRUSTED or CLIENT_TRUSTED
+        local trusted_host="${!trusted_host_var}"
+        
+        # Build exclusion list from previously allocated GPUs (per-device)
+        excluded_gpus=$(IFS=,; echo "${device_allocated_gpus_ref[*]}")
+        
+        # Map test to GPU: use manual specification if provided, otherwise auto-allocate  
+        if [ ${#cuda_idx_ref[@]} -gt 0 ]; then
+            gpu_idx=$((test_idx % ${#cuda_idx_ref[@]}))
+            specified_gpu="${cuda_idx_ref[gpu_idx]}"
+        else
+            specified_gpu=""
+        fi
+        
+        # Get CUDA index using topology analysis
+        CUDA_INDEX=$(get_cudas_per_rdma_device "$trusted_host" "$device" "$specified_gpu" "$excluded_gpus" | cut -d , -f 1)
+        
+        # Track this allocation per device
+        device_allocated_gpus_ref+=("$CUDA_INDEX")
+        
+        # Set output variables dynamically  
+        declare -g "${side}_cuda=--use_cuda=${CUDA_INDEX}"
+        declare -g "cuda_order=CUDA_DEVICE_ORDER=PCI_BUS_ID"
+        
+        log "${side^} test ${test_idx}: device ${device} allocated to GPU ${CUDA_INDEX}"
     fi
 }
 
