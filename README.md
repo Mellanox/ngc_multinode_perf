@@ -50,8 +50,8 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     [--duration=<time in seconds, default: 30 per test>]\
     [--bw_message_size_list=<list of message sizes>] \
     [--lat_message_size_list=<list of message sizes>] \
-    [--server_cuda=<cuda_device>] \
-    [--client_cuda=<cuda_device>] \
+    [--server_cuda=<cuda_devices, comma separated>] \
+    [--client_cuda=<cuda_devices, comma separated>] \
     [--unidir] \
     [--sd] \
     [--use-null-mr] \
@@ -61,10 +61,34 @@ bidirectional tests. Pass criterion is 90% of the port link speed.
     <list of DPU servers> <list of PFs associated to list of DPU servers>]
 ```
 
-* If running with CUDA:
-    * The nvidia-peermem driver should be loaded.
-    * Perftest should be built with CUDA support.
+### Working with GPUs
+* **Prerequisites**:
+    - The nvidia-peermem driver should be loaded.
+    - Perftest should be built with CUDA support.
+* **CUDA support**: Enable GPU-based RDMA testing with `--use_cuda`.
+* **Manual GPU selection**: Use `--server_cuda` and `--client_cuda` to specify which GPUs to use for each NIC/device.
+* **Automatic GPU allocation**: Use `--auto_gpus_per_device=<N>` to auto select N optimal GPUs per NIC/device
+* **Topology awareness**: The script prefers direct PCIe connections (PIX/PXB) for GPU-NIC pairing. If not enough optimal pairings are available, it will use less optimal NUMA node ("NODE") relations as needed.
+* **Result aggregation**: When multiple GPUs are assigned to a single NIC/device, results are automatically aggregated for validation.
 
+#### GPU usage Examples
+```bash
+# Automatic GPU allocation (Single GPU, PIX/PXB only)
+./ngc_rdma_test.sh client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda
+
+# Manual GPU assignment (if specific mapping needed) - mlx5_0 runs with cuda 0 on the server and cuda 2 on the client; mlx5_1 runs with 1 and 3 respectively. 
+./ngc_rdma_test.sh client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda --server_cuda=0,1 --client_cuda=2,3
+
+# Single device with multiple GPUs (2 parallel tests, aggregated results per device)
+./ngc_rdma_test.sh client mlx5_0 server mlx5_0 --use_cuda --server_cuda=0,1 --client_cuda=0,1
+
+# Multiple devices with even GPU distribution (4 parallel tests total, 2 per device, aggregated per device)
+./ngc_rdma_test.sh client mlx5_0,mlx5_1 server mlx5_0,mlx5_1 --use_cuda --server_cuda=0,1,2,3 --client_cuda=0,1,2,3
+
+# Automatic allocation for optimal utilization (recommended for complex topologies)
+./ngc_rdma_test.sh client mlx5_0 server mlx5_0 --use_cuda --auto_gpus_per_device=<N> # System finds best GPU configuration
+
+```
 
 ## RDMA Wrapper
 
