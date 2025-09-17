@@ -705,12 +705,14 @@ get_more_cores_for_closest_numa(){
 #global params :
 #NUMA_NODES
 get_available_cores_per_device(){
-    local SERVER_TRUSTED=$1
+    local CURRENT_TRUSTED=$1
     local REQ_CORE_NUM=$2
+    local SIDE=$3  # "SERVER" or "CLIENT"
+    local OTHER_TRUSTED=$4
     local i=0
     declare -a INDEX_OF_DEVICE_IN_NUMA
     declare -a NUM_ARRAY
-    STR_NUMASTL=$(ssh ${SERVER_TRUSTED} numactl -H)
+    STR_NUMASTL=$(ssh ${CURRENT_TRUSTED} numactl -H)
     #Set max to number of cores in first numa
     local MAX_POSSIBLE_CORES_PER_DEVICE=$( echo "${STR_NUMASTL}" | grep -i "node ${NUMA_NODES[0]} cpus" | awk '{print substr($0,14)}' | wc -w )
     if [ $MAX_POSSIBLE_CORES_PER_DEVICE -gt $REQ_CORE_NUM ]
@@ -724,7 +726,7 @@ get_available_cores_per_device(){
         if [  "$(eval "echo \${#${CORES_IN_NUMA_REF}[@]}")" -eq 0 ]
         then
             #Save core list on NUMA n
-            eval "declare -a CORES_IN_NUMA_${n}=($(ssh ${SERVER_TRUSTED} numactl -H | grep -i "node $n cpus" | awk '{print substr($0,14)}')) ";
+            eval "declare -a CORES_IN_NUMA_${n}=($(ssh ${CURRENT_TRUSTED} numactl -H | grep -i "node $n cpus" | awk '{print substr($0,14)}')) ";
             if [ "$(eval "echo \${#${CORES_IN_NUMA_REF}[@]}")" -lt $REQ_CORE_NUM ]
             then
                 eval "${CORES_IN_NUMA_REF}+=( $(get_more_cores_for_closest_numa $n "$STR_NUMASTL" $NEIGHBOR_LEVELS) )"
@@ -751,58 +753,56 @@ get_available_cores_per_device(){
     local j
     for n in "${NUMA_NODES[@]}"
     do
-        for ((j=0; j<MAX_POSSIBLE_CORES_PER_DEVICE; j++))
+        device_cores=()
+        # Split cores between server and client if they are on the same host
+        local start_index=0
+        local end_index=MAX_POSSIBLE_CORES_PER_DEVICE
+        if [ ${CURRENT_TRUSTED#*@} = ${OTHER_TRUSTED#*@} ]; then
+            if [ "$SIDE" = "SERVER" ]; then
+                end_index=$((MAX_POSSIBLE_CORES_PER_DEVICE/2))
+            elif [ "$SIDE" = "CLIENT" ]; then
+                start_index=$((MAX_POSSIBLE_CORES_PER_DEVICE/2))
+            fi
+        fi
+        for ((j=start_index; j<end_index; j++))
         do
             index=$((j + (INDEX_OF_DEVICE_IN_NUMA[i]-1)*MAX_POSSIBLE_CORES_PER_DEVICE))
 
             eval "res=\${CORES_IN_NUMA_${n}[\$index]}"
             eval "all=\${CORES_IN_NUMA_${n}[@]}"
-            echo -n "$res "
+            if [ "$ALLOW_CORE_ZERO" = "true" ] || [ "$res" != "0" ]; then
+                device_cores+=($res)
+            fi
         done
+        declare -ga "${SIDE}_DEVICE_${i}_CORES=(${device_cores[*]})"
         i=$((i+1))
     done
 }
 
-#Check if core zero is in any of the list of cores
-check_if_has_core_zero(){
-    for i in "${SERVER_CORES[@]}"
-    do
-        if [ $i -eq 0 ]
-        then
-            echo true
-            return 0
-        fi
-    done
-    for i in "${CLIENT_CORES[@]}"
-    do
-        if [ $i -eq 0 ]
-        then
-            echo true
-            return 0
-        fi
-    done
-    echo false
-}
 
 #Normalize core list:
 #use same number of cores on each side
 #avoid using core 0 if needed.
 #when running full duplex make sure w
-normlize_core_lists() {
-    local server_core_per_device=$(( ${#SERVER_CORES[@]}/NUM_DEVS ))
-    local client_core_per_device=$(( ${#CLIENT_CORES[@]}/NUM_DEVS ))
-    local max_usable_cores=$((server_core_per_device<client_core_per_device ? server_core_per_device : client_core_per_device))
+normalize_core_lists() {
+    # Find minimum cores across all devices
+    eval "local first_server_cores=(\${SERVER_DEVICE_0_CORES[@]})"
+    eval "local first_client_cores=(\${CLIENT_DEVICE_0_CORES[@]})"
+    local min_server_cores=${#first_server_cores[@]}
+    local min_client_cores=${#first_client_cores[@]}
+    
+    for((i=1; i<NUM_DEVS; i++)); do
+        eval "local server_cores=(\${SERVER_DEVICE_${i}_CORES[@]})"
+        eval "local client_cores=(\${CLIENT_DEVICE_${i}_CORES[@]})"
+        (( ${#server_cores[@]} < min_server_cores )) && min_server_cores=${#server_cores[@]}
+        (( ${#client_cores[@]} < min_client_cores )) && min_client_cores=${#client_cores[@]}
+    done
+    local max_usable_cores=$((min_server_cores<min_client_cores ? min_server_cores : min_client_cores))
     #TODO check if need to limit number of cores to number of channels
     max_usable_cores=$((84<max_usable_cores ? 84 : max_usable_cores))
-    s_offset=0
     e_offset=0
-    HAS_CORE_ZERO=$(check_if_has_core_zero)
-    if [ "$HAS_CORE_ZERO" = "true" ] && [ "$ALLOW_CORE_ZERO" = "false" ] && [ $max_usable_cores -gt 2 ]
-    then
-        s_offset=1
-    fi
     #in case of duplex make sure the #core is even
-    if [ "$DUPLEX" = "true" ] && [ $(((max_usable_cores-s_offset)%2)) -eq 1 ]
+    if [ "$DUPLEX" = "true" ] && [ $((max_usable_cores%2)) -eq 1 ]
     then
         e_offset=1
     fi
@@ -815,15 +815,19 @@ normlize_core_lists() {
     fi
     if [ $((max_usable_cores-NUM_DEVS)) -lt $finial_core_count ]
     then
-        up_to=$((finial_core_count - e_offset - s_offset))
+        up_to=$((finial_core_count - e_offset))
     else
         up_to=$finial_core_count
     fi
-    for((i=1; i<=NUM_DEVS; i++))
+    local shead_array=()
+    local chead_array=()
+    for((i=0; i<NUM_DEVS; i++))
     do
-        start_pos=$((finial_core_count*(i-1) + s_offset))
-        shead_array=(${shead_array[@]} ${SERVER_CORES[@]:$start_pos:up_to})
-        chead_array=(${chead_array[@]} ${CLIENT_CORES[@]:$start_pos:up_to})
+        eval "local client_device_cores=(\${CLIENT_DEVICE_${i}_CORES[@]})"
+        eval "local server_device_cores=(\${SERVER_DEVICE_${i}_CORES[@]})"
+
+        chead_array+=(${client_device_cores[@]:0:$up_to})
+        shead_array+=(${server_device_cores[@]:0:$up_to})
     done
     echo "${shead_array[@]} ${chead_array[@]}"
 }
@@ -834,19 +838,11 @@ get_cores_for_devices(){
     local SERVER_TRUSTED="${3}"
     local SERVER_DEVICES=(${4})
 
-    if [ ${CLIENT_TRUSTED#*@} = ${SERVER_TRUSTED#*@} ]
-    then
-        combindList="${4},${2}"
-        NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$combindList"))
-        get_available_cores_per_device $CLIENT_TRUSTED $5
-    else
-        NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$SERVER_DEVICES"))
-        read -ra SERVER_CORES <<< $(get_available_cores_per_device $SERVER_TRUSTED $5)
-        server_core_per_device=$((${#SERVER_CORES[@]}))
-        NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$CLIENT_DEVICES"))
-        read -ra CLIENT_CORES <<< $(get_available_cores_per_device $CLIENT_TRUSTED $server_core_per_device)
-        normlize_core_lists
-    fi
+    NUMA_NODES=($(get_numa_nodes_array "$SERVER_TRUSTED" "$SERVER_DEVICES"))
+    get_available_cores_per_device $SERVER_TRUSTED $5 "SERVER" "$CLIENT_TRUSTED"
+    NUMA_NODES=($(get_numa_nodes_array "$CLIENT_TRUSTED" "$CLIENT_DEVICES"))
+    get_available_cores_per_device $CLIENT_TRUSTED $5 "CLIENT" "$SERVER_TRUSTED"
+    normalize_core_lists
 }
 
 get_min_channels(){
