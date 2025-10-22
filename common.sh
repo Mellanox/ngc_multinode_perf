@@ -249,11 +249,11 @@ get_configured_namespaces() {
     shift
     local  DEVICES=("$@")
     local i=0
-    netns_list=$(ssh "${HOST}" "ip netns list | awk '{print \$1}'")
+    netns_list=$(ssh "${HOST}" "sudo ip netns list | awk '{print \$1}'")
     for dev in "${DEVICES[@]}"
     do
        for netns in $netns_list; do
-           dev_ns=$(ssh "${HOST}"     "ip netns exec $netns ls  /sys/class/infiniband/$dev/device/net 2> /dev/null")
+           dev_ns=$(ssh "${HOST}"     "sudo ip netns exec $netns ls  /sys/class/infiniband/$dev/device/net 2> /dev/null")
            if ! [ "$dev_ns" = "" ]; then
                dev_ns_list[i]="${netns}"
            fi
@@ -270,7 +270,7 @@ get_configured_namespaces() {
 get_command_prefix(){
     INDEX=${1}
     if [[ -v DEVICES_NS && "${DEVICES_NS[INDEX]}" == ngc_ns_* ]]; then
-        echo "ip netns exec ${DEVICES_NS[INDEX]} "
+        echo "sudo ip netns exec ${DEVICES_NS[INDEX]} "
     else
         echo ""
     fi
@@ -285,11 +285,11 @@ add_dev_to_namespace() {
     local HOST_DEVS=("$@")
     SERVER_NETDEV=("$(ssh "${HOST}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${HOST_DEVS[INDEX]}")")
     NEW_NS=ngc_ns_${TIME_STAMP}_${INDEX}
-    NS_PREFIX="ip netns exec ${NEW_NS}"
+    NS_PREFIX="sudo ip netns exec ${NEW_NS}"
     #create namespace
-    ssh "${HOST}" "ip netns add ${NEW_NS}"
+    ssh "${HOST}" "sudo ip netns add ${NEW_NS}"
     #Add dev to namespace
-    ssh "${HOST}" "ip link set ${SERVER_NETDEV} netns ${NEW_NS}"
+    ssh "${HOST}" "sudo ip link set ${SERVER_NETDEV} netns ${NEW_NS}"
     ssh "${HOST}" "sudo ${NS_PREFIX} ip link set lo up"
     ssh "${HOST}" "sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} down; sudo ${NS_PREFIX} ip l set ${SERVER_NETDEV} up; sleep 1; sudo ${NS_PREFIX} ip a add ${SERVER_IPS[INDEX]}/${SERVER_IPS_MASK[INDEX]} broadcast + dev ${SERVER_NETDEV}" || :
 
@@ -308,7 +308,7 @@ delete_namespaces_from_host() {
         if [[ "${DEVICES_NS[i]}" == ngc_ns_* ]]; then
             prefix="$(get_command_prefix ${i})"
             HOST_NETDEV="$(ssh "${HOST}" "$(typeset -f get_netdev_from_ibdev); get_netdev_from_ibdev ${HOST_DEVS[i]} "${prefix}" ")"
-               ssh "${HOST}" "ip netns delete ${DEVICES_NS[i]}"
+               ssh "${HOST}" "sudo ip netns delete ${DEVICES_NS[i]}"
             sleep 2
             ssh "${HOST}" "sudo ip l set ${HOST_NETDEV} down; sudo ip l set ${HOST_NETDEV} up; sleep 1 ;  sudo ip a add ${SERVER_IPS[i]}/${SERVER_IPS_MASK[i]} broadcast + dev ${HOST_NETDEV}" || :
             DEVICES_NS[i]="NGC_NA"
