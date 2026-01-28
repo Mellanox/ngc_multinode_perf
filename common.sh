@@ -948,9 +948,17 @@ enable_flow_stearing(){
 is_SPR() {
     #Sapphire Rapids CPU Model
     #https://en.wikichip.org/wiki/intel/microarchitectures/sapphire_rapids#CPUID
-    SPR=143
+    #also Emerald Rapids has same issue
+    SPR="143 207"
     cpu_model=$(ssh $1 lscpu | grep -A 10 "Vendor ID:" | grep -A 10 "Intel" | grep "Model:" | awk '{print $2}')
-    [[ $cpu_model -eq $SPR ]] &&  echo true || echo false
+
+    for id in $SPR; do
+        if [[ "$cpu_model" -eq "$id" ]]; then
+            echo true
+            return
+        fi
+    done
+    echo false
 }
 
 #ِAvailable Prams:
